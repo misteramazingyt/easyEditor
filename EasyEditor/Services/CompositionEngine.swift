@@ -346,7 +346,9 @@ struct CompositionEngine {
                                     filter: clip.filter,
                                     adjustments: clip.adjustments,
                                     rotationQuarterTurns: clip.rotationQuarterTurns,
-                                    isFlippedH: clip.isFlippedH)
+                                    isFlippedH: clip.isFlippedH,
+                                    effect: clip.effect,
+                                    mask: clip.mask)
         layer.startOpacity = clip.effectiveOpacity
         layer.endOpacity = clip.effectiveOpacity
         guard role != .solo, regionEnd > regionStart else { return layer }

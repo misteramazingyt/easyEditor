@@ -39,7 +39,9 @@ music    ▄▄▄▄▄        (green, FCP style)
 | Clips | trim (ripple), split at playhead, duplicate, delete, reorder |
 | Speed | 0.3×–3× per clip, pitch-corrected audio |
 | Audio | per-clip volume/mute, music import (Files), voiceover recording, synthesized SFX library |
-| Look | 10 filters (Core Image), brightness/contrast/saturation, rotate, flip |
+| Look | 10 filters (Core Image), brightness/contrast/saturation/temp/tint/hue/vignette, retouch, rotate, flip, opacity |
+| Effects | 15-effect browser grid (pixelate, kaleidoscope, thermal, fisheye, mirror…) |
+| Tools | reverse clip, freeze frame, shape masks (circle/rect/linear/mirror), auto captions (on-device speech) |
 | Transitions | dissolve, fade-to-black, slide L/R, zoom, per-boundary duration |
 | Text | Titles + captions on the purple lane, font size/color/plate, position/scale/opacity |
 | Images | connected stills with placement controls |

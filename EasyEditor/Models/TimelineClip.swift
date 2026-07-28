@@ -38,6 +38,10 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     var opacity: Double?
     var effectiveOpacity: Double { opacity ?? 1 }
 
+    /// Structural effect and shape mask (optional for old saved projects).
+    var effect: EffectPreset?
+    var mask: MaskSettings?
+
     /// Transition into the *next* primary clip (primary storyline only).
     var transitionToNext: Transition?
 

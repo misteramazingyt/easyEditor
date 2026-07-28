@@ -70,12 +70,113 @@ struct Adjustments: Codable, Equatable {
     var tint: Double?            // -1 (green) ... 1 (magenta)
     var hue: Double?             // -1 ... 1 (mapped to ±π)
     var vignette: Double?        //  0 ... 1
+    var retouch: Double?         //  0 ... 1 (skin-smoothing softener)
 
     var isIdentity: Bool {
         brightness == 0 && contrast == 1 && saturation == 1
             && (temp ?? 0) == 0 && (tint ?? 0) == 0
             && (hue ?? 0) == 0 && (vignette ?? 0) == 0
+            && (retouch ?? 0) == 0
     }
+}
+
+// MARK: - Effects (structural Core Image looks, TikTok effect-grid parity)
+
+enum EffectPreset: String, Codable, CaseIterable, Identifiable {
+    // Basic
+    case blur, pixelate, bloom, sharpen
+    // Retro
+    case comic, dotScreen, crystallize, thermal, xray, noirEdges
+    // Vibe
+    case kaleidoscope, zoomBlur, vortex, fisheye, mirror
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .blur: return "Blur"
+        case .pixelate: return "Pixelate"
+        case .bloom: return "Bloom"
+        case .sharpen: return "Sharpen"
+        case .comic: return "Comic"
+        case .dotScreen: return "Dots"
+        case .crystallize: return "Crystal"
+        case .thermal: return "Thermal"
+        case .xray: return "X-Ray"
+        case .noirEdges: return "Edges"
+        case .kaleidoscope: return "Kaleido"
+        case .zoomBlur: return "Zoom Blur"
+        case .vortex: return "Vortex"
+        case .fisheye: return "Fisheye"
+        case .mirror: return "Mirror"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .blur: return "drop.halffull"
+        case .pixelate: return "squareshape.split.3x3"
+        case .bloom: return "sparkles"
+        case .sharpen: return "triangle"
+        case .comic: return "book"
+        case .dotScreen: return "circle.grid.3x3.fill"
+        case .crystallize: return "hexagon.fill"
+        case .thermal: return "flame"
+        case .xray: return "bolt.horizontal"
+        case .noirEdges: return "scribble.variable"
+        case .kaleidoscope: return "asterisk"
+        case .zoomBlur: return "dot.radiowaves.left.and.right"
+        case .vortex: return "hurricane"
+        case .fisheye: return "circle.lefthalf.striped.horizontal"
+        case .mirror: return "rectangle.split.2x1"
+        }
+    }
+
+    var category: String {
+        switch self {
+        case .blur, .pixelate, .bloom, .sharpen: return "Basic"
+        case .comic, .dotScreen, .crystallize, .thermal, .xray, .noirEdges: return "Retro"
+        case .kaleidoscope, .zoomBlur, .vortex, .fisheye, .mirror: return "Vibe"
+        }
+    }
+
+    static var categories: [String] { ["Basic", "Retro", "Vibe"] }
+}
+
+// MARK: - Masks (TikTok mask tool)
+
+enum MaskShape: String, Codable, CaseIterable, Identifiable {
+    case linear, mirror, circle, rectangle
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .linear: return "Linear"
+        case .mirror: return "Mirror"
+        case .circle: return "Circle"
+        case .rectangle: return "Rectangle"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .linear: return "rectangle.tophalf.filled"
+        case .mirror: return "rectangle.split.1x2"
+        case .circle: return "circle"
+        case .rectangle: return "rectangle"
+        }
+    }
+}
+
+/// Geometry in unit canvas coordinates (y down, like placements).
+struct MaskSettings: Codable, Equatable {
+    var shape: MaskShape = .circle
+    var centerX: Double = 0.5
+    var centerY: Double = 0.5
+    var size: Double = 0.5      // fraction of the smaller canvas dimension
+    var feather: Double = 0.15  // 0 ... 0.5
+    var isInverted = false
 }
 
 // MARK: - Filters (TikTok filter parity, Core Image based)

@@ -107,7 +107,10 @@ struct EditorView: View {
                 case .speed: SpeedSheet()
                 case .volume: VolumeSheet()
                 case .filters: FilterSheet()
+                case .effects: EffectsSheet()
                 case .adjust: AdjustSheet()
+                case .retouch: RetouchSheet()
+                case .mask: MaskSheet()
                 case .opacity: OpacitySheet()
                 case .more: ClipInspectorView()
                 }
@@ -213,11 +216,12 @@ struct EditorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if editor.isImporting || editor.isRebuilding || editor.isGeneratingCaptions {
+            if editor.isImporting || editor.isRebuilding || editor.isGeneratingCaptions || editor.isProcessing {
                 VStack(spacing: 8) {
                     ProgressView()
                     Text(editor.isImporting ? "Importing…"
-                         : editor.isGeneratingCaptions ? "Transcribing…" : "Updating preview…")
+                         : editor.isGeneratingCaptions ? "Transcribing…"
+                         : editor.isProcessing ? "Processing clip…" : "Updating preview…")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Which tool sheet is open for the selected clip.
 enum ClipTool: String, Identifiable {
-    case speed, volume, filters, adjust, opacity, more
+    case speed, volume, filters, effects, adjust, retouch, mask, opacity, more
     var id: String { rawValue }
 }
 
@@ -52,7 +52,14 @@ struct SelectedClipToolbar: View {
         }
         if clip.kind == .video {
             tile("Filters", "camera.filters") { activeTool = .filters }
+            tile("Effects", "wand.and.stars") { activeTool = .effects }
             tile("Adjust", "slider.horizontal.3") { activeTool = .adjust }
+            tile("Retouch", "face.smiling") { activeTool = .retouch }
+            tile("Mask", "circle.dashed") { activeTool = .mask }
+            tile("Reverse", "arrow.uturn.left.circle") { editor.reverseClip(clip.id) }
+            if clip.lane == .primary {
+                tile("Freeze", "snowflake") { editor.freezeFrame(clip.id) }
+            }
             tile("Rotate", "rotate.right") {
                 editor.mutate(clip.id) { $0.rotationQuarterTurns += 1 }
                 editor.showToast("Rotated")

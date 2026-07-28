@@ -21,6 +21,7 @@ final class EditorState: ObservableObject {
     @Published private(set) var isImporting = false
     @Published private(set) var toast: String?
     @Published private(set) var isGeneratingCaptions = false
+    @Published private(set) var isProcessing = false
 
     let playback = PlaybackController()
 
@@ -329,6 +330,90 @@ final class EditorState: ObservableObject {
             clip.offset = max(0, timelineTime)
             project.update(clip)
             project.renumberPrimary()
+        }
+    }
+
+    // MARK: - Reverse & freeze frame
+
+    /// Rewrites the clip's media backwards (video only — audio is dropped)
+    /// and mirrors the trim window so the same slice stays selected.
+    func reverseClip(_ id: UUID) {
+        guard let clip = project.clip(id), clip.kind == .video,
+              let fileName = clip.fileName, !isProcessing else { return }
+        isProcessing = true
+        showToast("Reversing…")
+        Task {
+            defer { isProcessing = false }
+            let newName = "reversed-\(UUID().uuidString).mov"
+            let source = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+            let dest = FilePaths.mediaURL(projectID: project.id, fileName: newName)
+            do {
+                try await MediaProcessingService.reverseVideo(source: source, destination: dest)
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+            beginGesture()
+            mutateLive(id) { c in
+                let duration = c.assetDuration
+                let oldStart = c.trimStart, oldEnd = c.trimEnd
+                c.fileName = newName
+                c.trimStart = max(0, duration - oldEnd)
+                c.trimEnd = max(c.trimStart + 0.05, duration - oldStart)
+                c.isMuted = true // the reversed file has no audio track
+            }
+            await ThumbnailService.shared.invalidate(clipID: id)
+            showToast("Clip reversed (audio removed)")
+        }
+    }
+
+    /// TikTok Freeze: splits the clip at the playhead and inserts a
+    /// 3-second still of the frame under the playhead.
+    func freezeFrame(_ id: UUID) {
+        guard let clip = project.clip(id), clip.kind == .video,
+              clip.lane == .primary,
+              let fileName = clip.fileName, !isProcessing else { return }
+        let start = project.start(of: clip)
+        let local = playback.currentTime - start
+        guard local > 0.05, local < clip.effectiveDuration - 0.05 else {
+            errorMessage = "Move the playhead inside the clip to freeze a frame."
+            return
+        }
+        let sourceTime = clip.trimStart + local * clip.speed
+        isProcessing = true
+        showToast("Freezing frame…")
+        Task {
+            defer { isProcessing = false }
+            let freezeName = "freeze-\(UUID().uuidString).mov"
+            let source = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+            let dest = FilePaths.mediaURL(projectID: project.id, fileName: freezeName)
+            do {
+                try await MediaProcessingService.writeStillVideo(
+                    source: source, at: sourceTime, length: 3, to: dest)
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+            guard var first = project.clip(id) else { return }
+            beginGesture()
+            var second = first
+            second.id = UUID()
+            first.trimEnd = sourceTime
+            first.transitionToNext = nil
+            second.trimStart = sourceTime
+            second.order = first.order + 2
+            for c in project.primaryClips where c.order > first.order && c.id != first.id {
+                var moved = c
+                moved.order += 2
+                project.update(moved)
+            }
+            var freeze = TimelineClip.video(fileName: freezeName, duration: 3,
+                                            order: first.order + 1)
+            freeze.isMuted = true
+            project.update(first)
+            project.append(freeze)
+            project.append(second)
+            showToast("Freeze frame added")
         }
     }
 
