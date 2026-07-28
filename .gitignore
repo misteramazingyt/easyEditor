@@ -6,6 +6,7 @@ xcuserdata/
 
 # XcodeGen output (regenerate with `xcodegen generate`)
 *.xcodeproj/
+EasyEditor/Info.plist
 
 # macOS
 .DS_Store

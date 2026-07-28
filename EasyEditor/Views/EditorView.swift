@@ -23,6 +23,7 @@ struct EditorView: View {
     @State private var showTimelinePicker = false
     @State private var showMediaMenu = false
     @State private var showWebSearch = false
+    @State private var showDesktopLibrary = false
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -137,10 +138,20 @@ struct EditorView: View {
             } label: {
                 Label("Web Search", systemImage: "globe")
             }
+            Button {
+                showDesktopLibrary = true
+            } label: {
+                Label("Desktop Library", systemImage: "desktopcomputer")
+            }
             Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: $showWebSearch) {
             WebImageSearchSheet { image in
+                await editor.importWebImage(from: image.fullURL)
+            }
+        }
+        .sheet(isPresented: $showDesktopLibrary) {
+            DesktopLibrarySheet { image in
                 await editor.importWebImage(from: image.fullURL)
             }
         }

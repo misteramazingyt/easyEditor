@@ -7,6 +7,7 @@ struct ProjectListView: View {
     @State private var openProject: VideoProject?
     @State private var renaming: VideoProject?
     @State private var renameText = ""
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,18 @@ struct ProjectListView: View {
             }
             .background(Color(red: 0.05, green: 0.06, blue: 0.09))
             .navigationTitle("EasyEditor")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
             .fullScreenCover(item: $openProject) { project in
                 EditorView(project: project)
             }

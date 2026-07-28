@@ -19,17 +19,22 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: EasyEditor
+    info:
+      path: EasyEditor/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: "EasyEditor needs microphone access to record voiceovers."
+        NSPhotoLibraryAddUsageDescription: "EasyEditor needs permission to save exported videos to your Photos library."
+        NSSpeechRecognitionUsageDescription: "EasyEditor uses speech recognition to generate automatic captions from your clips."
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiresFullScreen: true
+        # The desktop-library server speaks plain HTTP over the tailnet
+        # (WireGuard-encrypted underneath); ATS must allow it.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.easyeditor.app
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "EasyEditor needs microphone access to record voiceovers."
-        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "EasyEditor needs permission to save exported videos to your Photos library."
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "EasyEditor uses speech recognition to generate automatic captions from your clips."
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
-        INFOPLIST_KEY_UIRequiresFullScreen: YES
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_PREVIEWS: YES
 
