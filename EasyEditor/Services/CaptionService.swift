@@ -24,15 +24,16 @@ enum CaptionService {
         }
     }
 
-    /// Transcribe `url` and return caption chunks inside the trim window.
-    static func captions(for url: URL, trimStart: Double, trimEnd: Double) async throws -> [Chunk] {
+    /// Raw word-level transcription of a media file (used by captions and
+    /// auto b-roll alike).
+    static func wordSegments(for url: URL) async throws -> [SFTranscriptionSegment] {
         guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
             throw CaptionError.unavailable
         }
         let request = SFSpeechURLRecognitionRequest(url: url)
         request.shouldReportPartialResults = false
 
-        let segments: [SFTranscriptionSegment] = try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             var finished = false
             _ = recognizer.recognitionTask(with: request) { result, error in
                 if let error {
@@ -46,7 +47,11 @@ enum CaptionService {
                 }
             }
         }
+    }
 
+    /// Transcribe `url` and return caption chunks inside the trim window.
+    static func captions(for url: URL, trimStart: Double, trimEnd: Double) async throws -> [Chunk] {
+        let segments = try await wordSegments(for: url)
         let inWindow = segments.filter {
             $0.timestamp + $0.duration > trimStart && $0.timestamp < trimEnd
         }

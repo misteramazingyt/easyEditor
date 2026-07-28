@@ -10,6 +10,7 @@ struct ToolbarView: View {
     let onVoice: () -> Void
     let onText: () -> Void
     let onCaptions: () -> Void
+    let onAutoBRoll: () -> Void
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -21,6 +22,7 @@ struct ToolbarView: View {
                 tile("Voice", systemImage: "mic", action: onVoice)
                 tile("Text", systemImage: "textformat", action: onText)
                 tile("Captions", systemImage: "captions.bubble", action: onCaptions)
+                tile("B-Roll", systemImage: "wand.and.stars", action: onAutoBRoll)
             }
             .padding(.horizontal, 12)
         }

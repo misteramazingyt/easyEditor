@@ -22,6 +22,8 @@ final class EditorState: ObservableObject {
     @Published private(set) var toast: String?
     @Published private(set) var isGeneratingCaptions = false
     @Published private(set) var isProcessing = false
+    /// Non-nil while auto b-roll runs; shows staged progress.
+    @Published private(set) var autoBRollStatus: String?
 
     let playback = PlaybackController()
 
@@ -444,6 +446,124 @@ final class EditorState: ObservableObject {
             clip.offset = max(0, timelineTime)
             project.update(clip)
             project.renumberPrimary()
+        }
+    }
+
+    // MARK: - Auto B-Roll
+
+    func runAutoBRoll(_ settings: AutoBRollService.Settings,
+                      desktopService: DesktopLibraryService?,
+                      pexelsKey: String) {
+        guard autoBRollStatus == nil else { return }
+        guard project.primaryClips.contains(where: { $0.kind == .video }) else {
+            errorMessage = "Add a video with speech before generating b-roll."
+            return
+        }
+        autoBRollStatus = "Transcribing…"
+        Task {
+            defer { autoBRollStatus = nil }
+            guard await CaptionService.authorize() else {
+                errorMessage = "Speech recognition permission is off. Enable it in Settings → EasyEditor."
+                return
+            }
+            let mentions: [AutoBRollService.Mention]
+            do {
+                mentions = try await AutoBRollService.detectMentions(project: project,
+                                                                     settings: settings)
+            } catch {
+                errorMessage = "Transcription failed: \(error.localizedDescription)"
+                return
+            }
+            guard !mentions.isEmpty else {
+                errorMessage = "No visual mentions found — try lowering the confidence threshold or enabling more coverage."
+                return
+            }
+            pushUndo()
+            let pexels = pexelsKey.isEmpty ? nil : PexelsService(apiKey: pexelsKey)
+            let minDuration = Double(settings.minDurationFrames) / 30
+            let imageDuration = max(minDuration, 2.2)
+            var added = 0
+
+            for (index, mention) in mentions.enumerated() {
+                autoBRollStatus = "\(index + 1)/\(mentions.count): \(mention.text)"
+                var placed = 0
+
+                // Video first when requested and Pexels is configured.
+                if settings.media != .images, let pexels,
+                   let hit = try? await pexels.searchVideo(mention.text),
+                   let (data, _) = try? await URLSession.shared.data(from: hit.downloadURL) {
+                    let temp = FilePaths.tempDirectory
+                        .appendingPathComponent(UUID().uuidString + ".mp4")
+                    try? data.write(to: temp)
+                    if let imported = await importer.importVideoFile(temp, projectID: project.id,
+                                                                    deleteSource: true),
+                       case .video(let fileName, let duration) = imported {
+                        var clip = TimelineClip.video(fileName: fileName, duration: duration, order: 0)
+                        clip.lane = .broll
+                        clip.offset = mention.timelineTime
+                        clip.trimEnd = min(duration, max(minDuration, 3.5))
+                        clip.isMuted = true
+                        clip.laneIndex = freeStackIndex(for: clip, desired: 1)
+                        clip.inOut = InOutSettings()
+                        project.append(clip)
+                        added += 1
+                        placed += 1
+                    }
+                }
+
+                // Stills: primary media, remaining slots, or video fallback.
+                let wantStills = settings.media != .video
+                    || (settings.fallbackToStills && placed == 0)
+                if wantStills && placed < settings.maxAssetsPerMention {
+                    let images = await searchBRollImages(mention.text,
+                                                         source: settings.source,
+                                                         desktopService: desktopService)
+                    for image in images.prefix(settings.maxAssetsPerMention - placed) {
+                        guard let (data, _) = try? await URLSession.shared.data(from: image.fullURL),
+                              let fileName = importer.saveImageData(data, projectID: project.id) else {
+                            continue
+                        }
+                        var clip = TimelineClip.image(
+                            fileName: fileName,
+                            at: mention.timelineTime + Double(placed) * imageDuration)
+                        clip.trimEnd = imageDuration
+                        clip.placement = Self.placement(for: settings.insertStyle)
+                        clip.laneIndex = freeStackIndex(for: clip, desired: 1)
+                        clip.inOut = InOutSettings()
+                        project.append(clip)
+                        added += 1
+                        placed += 1
+                    }
+                }
+            }
+            if added == 0 {
+                errorMessage = "Found \(mentions.count) mentions but couldn't fetch media for them — check the server/network."
+            } else {
+                showToast("Added \(added) b-roll clip\(added == 1 ? "" : "s")")
+                Haptics.success()
+            }
+        }
+    }
+
+    private func searchBRollImages(_ query: String,
+                                   source: AutoBRollService.MediaSource,
+                                   desktopService: DesktopLibraryService?) async -> [WebImage] {
+        if source != .web, let desktopService,
+           let hits = try? await desktopService.search(query, count: 6), !hits.isEmpty {
+            return hits
+        }
+        if source != .desktop,
+           let hits = try? await WebImageSearchService().search(query), !hits.isEmpty {
+            return hits
+        }
+        return []
+    }
+
+    private static func placement(for style: AutoBRollService.InsertStyle) -> OverlayPlacement {
+        switch style {
+        case .cutaway: return OverlayPlacement(centerX: 0.5, centerY: 0.5, widthFraction: 1.0)
+        case .overlay: return OverlayPlacement(centerX: 0.72, centerY: 0.28, widthFraction: 0.5)
+        case .fullFrame: return OverlayPlacement(centerX: 0.5, centerY: 0.5, widthFraction: 1.08)
         }
     }
 

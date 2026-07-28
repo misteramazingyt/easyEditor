@@ -24,6 +24,7 @@ struct EditorView: View {
     @State private var showMediaMenu = false
     @State private var showWebSearch = false
     @State private var showDesktopLibrary = false
+    @State private var showAutoBRoll = false
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -59,7 +60,8 @@ struct EditorView: View {
                     onSFX: { showSFXSheet = true },
                     onVoice: { showVoiceSheet = true },
                     onText: { textSheetIsTitle = false; showTextSheet = true },
-                    onCaptions: { editor.generateCaptions() })
+                    onCaptions: { editor.generateCaptions() },
+                    onAutoBRoll: { showAutoBRoll = true })
             }
         }
         .background(Color(red: 0.05, green: 0.06, blue: 0.09).ignoresSafeArea())
@@ -155,6 +157,9 @@ struct EditorView: View {
             DesktopLibrarySheet { image in
                 await editor.importWebImage(from: image.fullURL)
             }
+        }
+        .sheet(isPresented: $showAutoBRoll) {
+            AutoBRollSheet().environmentObject(editor)
         }
         .fullScreenCover(isPresented: $showFullscreen) {
             ZStack(alignment: .topTrailing) {

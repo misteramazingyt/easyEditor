@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage(DesktopLibrarySettings.urlKey) private var serverURL = ""
     @AppStorage(DesktopLibrarySettings.tokenKey) private var serverToken = ""
+    @AppStorage(PexelsService.apiKeyStorageKey) private var pexelsKey = ""
     @Environment(\.dismiss) private var dismiss
 
     enum TestState: Equatable {
@@ -46,6 +47,20 @@ struct SettingsView: View {
                     .disabled(serverURL.isEmpty || testState == .testing)
                 } header: {
                     Text("Desktop Library")
+                } footer: {
+                    EmptyView()
+                }
+                Section {
+                    TextField("Pexels API key (optional)", text: $pexelsKey)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                } header: {
+                    Text("Stock Video")
+                } footer: {
+                    Text("Auto B-Roll pulls stock video from Pexels. Get a free key at pexels.com/api.")
+                }
+                Section {
+                    EmptyView()
                 } footer: {
                     Text("""
                     Run desktop-server/server.py on your desktop (see its README), \
