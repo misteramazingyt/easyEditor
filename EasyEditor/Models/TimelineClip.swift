@@ -34,6 +34,10 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     var rotationQuarterTurns: Int = 0
     var isFlippedH = false
 
+    /// Whole-clip opacity for video layers (optional for old saved projects).
+    var opacity: Double?
+    var effectiveOpacity: Double { opacity ?? 1 }
+
     /// Transition into the *next* primary clip (primary storyline only).
     var transitionToNext: Transition?
 

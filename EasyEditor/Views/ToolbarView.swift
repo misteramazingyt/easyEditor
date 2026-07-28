@@ -10,23 +10,27 @@ struct ToolbarView: View {
     let onSFX: () -> Void
     let onVoice: () -> Void
     let onText: () -> Void
+    let onCaptions: () -> Void
 
     private let tileColor = Color(red: 0.2, green: 0.65, blue: 0.93)
 
     var body: some View {
-        HStack(spacing: 10) {
-            PhotosPicker(selection: $pickedMedia,
-                         maxSelectionCount: 20,
-                         matching: .any(of: [.videos, .images])) {
-                tile("Media", systemImage: "play.rectangle")
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                PhotosPicker(selection: $pickedMedia,
+                             maxSelectionCount: 20,
+                             matching: .any(of: [.videos, .images])) {
+                    tile("Media", systemImage: "play.rectangle")
+                }
+                button("Music", systemImage: "music.note", action: onMusic)
+                button("Title", systemImage: "textformat.alt", action: onTitle)
+                button("SFX", systemImage: "waveform", action: onSFX)
+                button("Voice", systemImage: "mic", action: onVoice)
+                button("Text", systemImage: "textformat", action: onText)
+                button("Captions", systemImage: "captions.bubble", action: onCaptions)
             }
-            button("Music", systemImage: "music.note", action: onMusic)
-            button("Title", systemImage: "textformat.alt", action: onTitle)
-            button("SFX", systemImage: "waveform", action: onSFX)
-            button("Voice", systemImage: "mic", action: onVoice)
-            button("Text", systemImage: "textformat", action: onText)
+            .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity)

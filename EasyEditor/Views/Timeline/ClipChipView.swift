@@ -25,8 +25,8 @@ struct ClipChipView: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(isSelected ? Color.yellow : Color.white.opacity(0.15),
-                              lineWidth: isSelected ? 2 : 1)
+                .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.15),
+                              lineWidth: isSelected ? 2.5 : 1)
         )
         .overlay(alignment: .leading) {
             if isSelected { handle(.leading) }
@@ -150,11 +150,11 @@ struct ClipChipView: View {
 
     private func handle(_ edge: TrimEdge) -> some View {
         RoundedRectangle(cornerRadius: 3)
-            .fill(Color.yellow)
-            .frame(width: 10, height: max(14, height * 0.8))
+            .fill(Color.white)
+            .frame(width: 11, height: max(14, height * 0.85))
             .overlay(
                 Image(systemName: edge == .leading ? "chevron.left" : "chevron.right")
-                    .font(.system(size: 7, weight: .black))
+                    .font(.system(size: 8, weight: .black))
                     .foregroundStyle(.black)
             )
             .contentShape(Rectangle().inset(by: -8))

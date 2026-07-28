@@ -134,11 +134,33 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             // 4. Per-clip filter + adjustments.
             image = Self.applyFilter(layer.filter, to: image)
             if !layer.adjustments.isIdentity {
-                image = image.applyingFilter("CIColorControls", parameters: [
-                    kCIInputBrightnessKey: layer.adjustments.brightness,
-                    kCIInputContrastKey: layer.adjustments.contrast,
-                    kCIInputSaturationKey: layer.adjustments.saturation,
-                ])
+                let adj = layer.adjustments
+                if adj.brightness != 0 || adj.contrast != 1 || adj.saturation != 1 {
+                    image = image.applyingFilter("CIColorControls", parameters: [
+                        kCIInputBrightnessKey: adj.brightness,
+                        kCIInputContrastKey: adj.contrast,
+                        kCIInputSaturationKey: adj.saturation,
+                    ])
+                }
+                let temp = adj.temp ?? 0, tint = adj.tint ?? 0
+                if temp != 0 || tint != 0 {
+                    image = image.applyingFilter("CITemperatureAndTint", parameters: [
+                        "inputNeutral": CIVector(x: 6500, y: 0),
+                        "inputTargetNeutral": CIVector(x: 6500 + CGFloat(temp) * 1500,
+                                                       y: CGFloat(tint) * 50),
+                    ])
+                }
+                if let hue = adj.hue, hue != 0 {
+                    image = image.applyingFilter("CIHueAdjust", parameters: [
+                        kCIInputAngleKey: hue * .pi,
+                    ])
+                }
+                if let vignette = adj.vignette, vignette > 0 {
+                    image = image.applyingFilter("CIVignette", parameters: [
+                        kCIInputIntensityKey: vignette * 2,
+                        kCIInputRadiusKey: 2,
+                    ]).cropped(to: image.extent)
+                }
             }
 
             // 5. Transition animation (slide/zoom) lerped across the interval.

@@ -15,9 +15,12 @@ final class EditorState: ObservableObject {
     @Published var selectedClipID: UUID?
     @Published var pixelsPerSecond: CGFloat = 60
     @Published private(set) var canUndo = false
+    @Published private(set) var canRedo = false
     @Published private(set) var isRebuilding = false
     @Published var errorMessage: String?
     @Published private(set) var isImporting = false
+    @Published private(set) var toast: String?
+    @Published private(set) var isGeneratingCaptions = false
 
     let playback = PlaybackController()
 
@@ -25,6 +28,8 @@ final class EditorState: ObservableObject {
     private let importer = MediaImportService()
     private let save: (VideoProject) -> Void
     private var undoStack: [VideoProject] = []
+    private var redoStack: [VideoProject] = []
+    private var toastTask: Task<Void, Never>?
     private let projectChanged = PassthroughSubject<Void, Never>()
     private var cancellables: Set<AnyCancellable> = []
     private var rebuildTask: Task<Void, Never>?
@@ -86,15 +91,42 @@ final class EditorState: ObservableObject {
     private func pushUndo() {
         undoStack.append(project)
         if undoStack.count > 50 { undoStack.removeFirst() }
+        redoStack.removeAll()
         canUndo = true
+        canRedo = false
     }
 
     func undo() {
         guard let previous = undoStack.popLast() else { return }
+        redoStack.append(project)
         project = previous
         canUndo = !undoStack.isEmpty
+        canRedo = true
         if let id = selectedClipID, project.clip(id) == nil {
             selectedClipID = nil
+        }
+    }
+
+    func redo() {
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(project)
+        project = next
+        canUndo = true
+        canRedo = !redoStack.isEmpty
+        if let id = selectedClipID, project.clip(id) == nil {
+            selectedClipID = nil
+        }
+    }
+
+    // MARK: - Toasts ("Clip reversed" style transient labels)
+
+    func showToast(_ message: String) {
+        toast = message
+        toastTask?.cancel()
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            guard !Task.isCancelled else { return }
+            self?.toast = nil
         }
     }
 
@@ -297,6 +329,73 @@ final class EditorState: ObservableObject {
             clip.offset = max(0, timelineTime)
             project.update(clip)
             project.renumberPrimary()
+        }
+    }
+
+    /// TikTok's timeline speaker toggle: mute/unmute all original clip audio.
+    func toggleOriginalAudio() {
+        let anyAudible = project.primaryClips.contains { !$0.isMuted }
+        pushUndo()
+        for clip in project.primaryClips {
+            var updated = clip
+            updated.isMuted = anyAudible
+            project.update(updated)
+        }
+        showToast(anyAudible ? "Original sound off" : "Original sound on")
+    }
+
+    var originalAudioEnabled: Bool {
+        project.primaryClips.contains { !$0.isMuted }
+    }
+
+    // MARK: - Auto captions
+
+    func generateCaptions() {
+        guard !isGeneratingCaptions else { return }
+        let videoClips = project.primaryClips.filter { $0.kind == .video && $0.fileName != nil }
+        guard !videoClips.isEmpty else {
+            errorMessage = "Add a video before generating captions."
+            return
+        }
+        isGeneratingCaptions = true
+        showToast("Transcribing audio…")
+        Task {
+            defer { isGeneratingCaptions = false }
+            guard await CaptionService.authorize() else {
+                errorMessage = "Speech recognition permission is off. Enable it in Settings → EasyEditor."
+                return
+            }
+            var captions: [(text: String, start: Double, duration: Double)] = []
+            let starts = project.primaryStartTimes
+            for clip in videoClips {
+                guard let fileName = clip.fileName else { continue }
+                let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+                do {
+                    let chunks = try await CaptionService.captions(
+                        for: url, trimStart: clip.trimStart, trimEnd: clip.trimEnd)
+                    let clipStart = starts[clip.id] ?? 0
+                    for chunk in chunks {
+                        let start = clipStart + (chunk.start - clip.trimStart) / clip.speed
+                        let duration = max(0.6, chunk.duration / clip.speed)
+                        captions.append((chunk.text, start, duration))
+                    }
+                } catch {
+                    Log.engine.error("Caption transcription failed: \(error.localizedDescription)")
+                }
+            }
+            guard !captions.isEmpty else {
+                errorMessage = "Couldn't hear any speech to caption."
+                return
+            }
+            pushUndo()
+            for caption in captions {
+                var clip = TimelineClip.title(
+                    TextPayload(string: caption.text, style: .caption),
+                    placement: .caption, at: caption.start)
+                clip.trimEnd = caption.duration
+                project.append(clip)
+            }
+            showToast("Added \(captions.count) captions")
         }
     }
 

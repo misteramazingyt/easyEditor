@@ -1,8 +1,17 @@
 import SwiftUI
+import AVFAudio
 
 @main
 struct EasyEditorApp: App {
     @StateObject private var state = AppState()
+
+    init() {
+        // Without an explicit category iOS uses .soloAmbient, which the
+        // ring/silent switch mutes — making all playback appear broken.
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .moviePlayback)
+        try? session.setActive(true)
+    }
 
     var body: some Scene {
         WindowGroup {

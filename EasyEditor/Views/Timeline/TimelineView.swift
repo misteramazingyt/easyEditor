@@ -12,6 +12,8 @@ struct TimelineView: View {
     @EnvironmentObject private var editor: EditorState
     @Binding var transitionAfterClipID: UUID?
     @Binding var showInspector: Bool
+    var onAddMedia: () -> Void = {}
+    var onAddSound: () -> Void = {}
 
     // MARK: Metrics
 
@@ -89,6 +91,18 @@ struct TimelineView: View {
                     .frame(width: 2, height: totalHeight - 4)
                     .position(x: centerX, y: (totalHeight - 4) / 2 + 2)
                     .allowsHitTesting(false)
+
+                // TikTok-style "Add sound" pill, pinned while the music lane is empty.
+                if editor.project.clips(in: .music).isEmpty && editor.project.clips(in: .voice).isEmpty {
+                    Button(action: onAddSound) {
+                        Label("Add sound", systemImage: "music.note")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12).padding(.vertical, 5)
+                            .background(.white.opacity(0.12), in: Capsule())
+                    }
+                    .position(x: geo.size.width / 2, y: laneCenterY(.music))
+                }
             }
             .frame(width: geo.size.width, height: totalHeight, alignment: .topLeading)
             .clipped()
@@ -207,13 +221,15 @@ struct TimelineView: View {
 
     private func addMediaButton(pps: CGFloat) -> some View {
         let end = editor.project.storylineDuration
-        return Image(systemName: "plus")
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(.white.opacity(0.7))
-            .frame(width: 28, height: primaryHeight)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
-            .offset(x: CGFloat(end) * pps + 6, y: laneTop(.primary))
-            .allowsHitTesting(false)
+        return Button(action: onAddMedia) {
+            Image(systemName: "plus")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.black)
+                .frame(width: 30, height: 30)
+                .background(.white, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .offset(x: CGFloat(end) * pps + 8,
+                y: laneTop(.primary) + (primaryHeight - 30) / 2)
     }
 
     // MARK: - Scrub & zoom

@@ -69,7 +69,7 @@ final class VoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         // Hand ownership of the file to the caller; discard() must not delete it.
         self.fileName = nil
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        restorePlaybackSession()
         guard duration > 0.2 else {
             if let projectID {
                 try? FileManager.default.removeItem(
@@ -90,6 +90,14 @@ final class VoiceRecorder: NSObject, ObservableObject, AVAudioRecorderDelegate {
         }
         recorder = nil
         isRecording = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        restorePlaybackSession()
+    }
+
+    /// Put the shared session back into playback mode after recording so the
+    /// editor's preview audio keeps working (and ignores the silent switch).
+    private func restorePlaybackSession() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .moviePlayback)
+        try? session.setActive(true)
     }
 }

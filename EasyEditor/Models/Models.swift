@@ -65,8 +65,17 @@ struct Adjustments: Codable, Equatable {
     var brightness: Double = 0   // -0.5 ... 0.5
     var contrast: Double = 1     //  0.5 ... 1.5
     var saturation: Double = 1   //  0   ... 2
+    // Optional so projects saved by older builds still decode.
+    var temp: Double?            // -1 (cool) ... 1 (warm)
+    var tint: Double?            // -1 (green) ... 1 (magenta)
+    var hue: Double?             // -1 ... 1 (mapped to ±π)
+    var vignette: Double?        //  0 ... 1
 
-    var isIdentity: Bool { brightness == 0 && contrast == 1 && saturation == 1 }
+    var isIdentity: Bool {
+        brightness == 0 && contrast == 1 && saturation == 1
+            && (temp ?? 0) == 0 && (tint ?? 0) == 0
+            && (hue ?? 0) == 0 && (vignette ?? 0) == 0
+    }
 }
 
 // MARK: - Filters (TikTok filter parity, Core Image based)

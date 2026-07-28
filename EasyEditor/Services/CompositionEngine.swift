@@ -347,6 +347,8 @@ struct CompositionEngine {
                                     adjustments: clip.adjustments,
                                     rotationQuarterTurns: clip.rotationQuarterTurns,
                                     isFlippedH: clip.isFlippedH)
+        layer.startOpacity = clip.effectiveOpacity
+        layer.endOpacity = clip.effectiveOpacity
         guard role != .solo, regionEnd > regionStart else { return layer }
 
         // Normalized transition progress at this instruction's endpoints.
@@ -354,22 +356,23 @@ struct CompositionEngine {
         let p0 = min(1, max(0, (t0 - regionStart) / span))
         let p1 = min(1, max(0, (t1 - regionStart) / span))
 
+        let baseOpacity = clip.effectiveOpacity
         switch (style, role) {
         case (.crossDissolve, .incoming), (.zoom, .incoming):
-            layer.startOpacity = p0
-            layer.endOpacity = p1
+            layer.startOpacity = p0 * baseOpacity
+            layer.endOpacity = p1 * baseOpacity
             if style == .zoom {
                 layer.startScale = 1.25 - 0.25 * p0
                 layer.endScale = 1.25 - 0.25 * p1
             }
         case (.fadeToBlack, .outgoing):
             // Fades out across the first half of the region.
-            layer.startOpacity = 1 - min(1, p0 * 2)
-            layer.endOpacity = 1 - min(1, p1 * 2)
+            layer.startOpacity = (1 - min(1, p0 * 2)) * baseOpacity
+            layer.endOpacity = (1 - min(1, p1 * 2)) * baseOpacity
         case (.fadeToBlack, .incoming):
             // Fades in across the second half.
-            layer.startOpacity = max(0, p0 * 2 - 1)
-            layer.endOpacity = max(0, p1 * 2 - 1)
+            layer.startOpacity = max(0, p0 * 2 - 1) * baseOpacity
+            layer.endOpacity = max(0, p1 * 2 - 1) * baseOpacity
         case (.slideLeft, .incoming):
             layer.startTranslationX = 1 - p0
             layer.endTranslationX = 1 - p1

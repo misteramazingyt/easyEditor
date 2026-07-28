@@ -19,6 +19,8 @@ struct EditorView: View {
     @State private var showInspector = false
     @State private var showFullscreen = false
     @State private var transitionAfterClipID: UUID?
+    @State private var activeTool: ClipTool?
+    @State private var showTimelinePicker = false
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -38,15 +40,24 @@ struct EditorView: View {
             preview
             transportBar
             TimelineView(transitionAfterClipID: $transitionAfterClipID,
-                         showInspector: $showInspector)
+                         showInspector: $showInspector,
+                         onAddMedia: { showTimelinePicker = true },
+                         onAddSound: { showMusicImporter = true })
                 .environmentObject(editor)
-            ToolbarView(
-                pickedMedia: $pickedMedia,
-                onMusic: { showMusicImporter = true },
-                onTitle: { textSheetIsTitle = true; showTextSheet = true },
-                onSFX: { showSFXSheet = true },
-                onVoice: { showVoiceSheet = true },
-                onText: { textSheetIsTitle = false; showTextSheet = true })
+            if editor.selectedClipID != nil {
+                SelectedClipToolbar(activeTool: $activeTool,
+                                    transitionAfterClipID: $transitionAfterClipID)
+                    .environmentObject(editor)
+            } else {
+                ToolbarView(
+                    pickedMedia: $pickedMedia,
+                    onMusic: { showMusicImporter = true },
+                    onTitle: { textSheetIsTitle = true; showTextSheet = true },
+                    onSFX: { showSFXSheet = true },
+                    onVoice: { showVoiceSheet = true },
+                    onText: { textSheetIsTitle = false; showTextSheet = true },
+                    onCaptions: { editor.generateCaptions() })
+            }
         }
         .background(Color(red: 0.05, green: 0.06, blue: 0.09).ignoresSafeArea())
         .onAppear {
@@ -90,6 +101,23 @@ struct EditorView: View {
             TransitionPickerView(clipID: clipID).environmentObject(editor)
                 .presentationDetents([.height(300)])
         }
+        .sheet(item: $activeTool) { tool in
+            Group {
+                switch tool {
+                case .speed: SpeedSheet()
+                case .volume: VolumeSheet()
+                case .filters: FilterSheet()
+                case .adjust: AdjustSheet()
+                case .opacity: OpacitySheet()
+                case .more: ClipInspectorView()
+                }
+            }
+            .environmentObject(editor)
+        }
+        .photosPicker(isPresented: $showTimelinePicker,
+                      selection: $pickedMedia,
+                      maxSelectionCount: 20,
+                      matching: .any(of: [.videos, .images]))
         .fullScreenCover(isPresented: $showFullscreen) {
             ZStack(alignment: .topTrailing) {
                 Color.black.ignoresSafeArea()
@@ -134,6 +162,13 @@ struct EditorView: View {
             }
             .disabled(!editor.canUndo)
             .opacity(editor.canUndo ? 1 : 0.35)
+            Button {
+                editor.redo()
+            } label: {
+                Image(systemName: "arrow.uturn.forward").font(.title3)
+            }
+            .disabled(!editor.canRedo)
+            .opacity(editor.canRedo ? 1 : 0.35)
 
             Spacer()
 
@@ -178,15 +213,28 @@ struct EditorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            if editor.isImporting || editor.isRebuilding {
+            if editor.isImporting || editor.isRebuilding || editor.isGeneratingCaptions {
                 VStack(spacing: 8) {
                     ProgressView()
-                    Text(editor.isImporting ? "Importing…" : "Updating preview…")
+                    Text(editor.isImporting ? "Importing…"
+                         : editor.isGeneratingCaptions ? "Transcribing…" : "Updating preview…")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .padding(14)
                 .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+            }
+            if let toast = editor.toast {
+                VStack {
+                    Text(toast)
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(.black.opacity(0.75), in: Capsule())
+                        .padding(.top, 14)
+                    Spacer()
+                }
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.2), value: editor.toast)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -197,14 +245,24 @@ struct EditorView: View {
 
     private var transportBar: some View {
         HStack {
-            Button {
-                if editor.selectedClipID != nil {
-                    showInspector = true
-                } else {
-                    Haptics.warning()
+            HStack(spacing: 18) {
+                Button {
+                    if editor.selectedClipID != nil {
+                        showInspector = true
+                    } else {
+                        Haptics.warning()
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.3").font(.title3)
                 }
-            } label: {
-                Image(systemName: "slider.horizontal.3").font(.title3)
+                Button {
+                    editor.toggleOriginalAudio()
+                } label: {
+                    Image(systemName: editor.originalAudioEnabled
+                          ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                        .font(.title3)
+                }
+                .disabled(editor.project.primaryClips.isEmpty)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
