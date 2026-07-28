@@ -7,55 +7,78 @@ import CoreImage
 /// what you see is exactly what ships.
 enum OverlayRenderer {
 
-    /// Render a text payload at canvas scale. The image is sized to the text.
+    /// Render a text payload at canvas scale, TikTok style: per-line rounded
+    /// background bubbles, optional heavy outline, bundled TikTok Sans.
+    /// The image is sized to the text.
     static func render(text: TextPayload, canvasWidth: CGFloat) -> CIImage? {
         let style = text.style
-        let font = UIFont(name: style.fontName, size: style.fontSize)
-            ?? UIFont.boldSystemFont(ofSize: style.fontSize)
+        let fontSize = CGFloat(style.fontSize)
+        let font = UIFont(name: style.fontName, size: fontSize)
+            ?? UIFont.boldSystemFont(ofSize: fontSize)
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         paragraph.lineBreakMode = .byWordWrapping
+        paragraph.lineSpacing = fontSize * 0.06
 
         var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: uiColor(hex: style.colorHex) ?? .white,
             .paragraphStyle: paragraph,
         ]
-        if style.hasShadow {
+        if style.outline == true {
+            // Negative width = stroke AND fill; value is % of font size.
+            attributes[.strokeColor] = UIColor.black
+            attributes[.strokeWidth] = -6.5
+        } else if style.hasShadow && style.backgroundHex == nil {
             let shadow = NSShadow()
-            shadow.shadowColor = UIColor.black.withAlphaComponent(0.6)
-            shadow.shadowBlurRadius = style.fontSize * 0.08
-            shadow.shadowOffset = CGSize(width: 0, height: style.fontSize * 0.04)
+            shadow.shadowColor = UIColor.black.withAlphaComponent(0.55)
+            shadow.shadowBlurRadius = fontSize * 0.1
+            shadow.shadowOffset = CGSize(width: 0, height: fontSize * 0.03)
             attributes[.shadow] = shadow
         }
 
-        let string = NSAttributedString(string: text.string, attributes: attributes)
-        let maxWidth = canvasWidth * 0.92
-        var bounds = string.boundingRect(with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
-                                         options: [.usesLineFragmentOrigin, .usesFontLeading],
-                                         context: nil).size
-        bounds.width = min(maxWidth, ceil(bounds.width) + style.fontSize * 0.5)
-        bounds.height = ceil(bounds.height) + style.fontSize * 0.4
+        // Layout with TextKit so we know each line's exact rect (for bubbles).
+        let maxWidth = canvasWidth * 0.9
+        let storage = NSTextStorage(attributedString:
+            NSAttributedString(string: text.string, attributes: attributes))
+        let container = NSTextContainer(size: CGSize(width: maxWidth,
+                                                     height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        let manager = NSLayoutManager()
+        manager.addTextContainer(container)
+        storage.addLayoutManager(manager)
+        manager.ensureLayout(for: container)
+        let used = manager.usedRect(for: container)
 
-        let padding: CGFloat = style.backgroundHex != nil ? style.fontSize * 0.3 : 0
-        let canvas = CGSize(width: bounds.width + padding * 2, height: bounds.height + padding * 2)
+        let hasPlate = style.backgroundHex != nil
+        let padX = fontSize * (hasPlate ? 0.42 : 0.18)
+        let padY = fontSize * (hasPlate ? 0.3 : 0.18)
+        let canvas = CGSize(width: ceil(used.width) + padX * 2,
+                            height: ceil(used.height) + padY * 2)
+        let origin = CGPoint(x: padX - used.minX, y: padY - used.minY)
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = false
         let renderer = UIGraphicsImageRenderer(size: canvas, format: format)
-        let image = renderer.image { ctx in
+        let image = renderer.image { _ in
             if let bgHex = style.backgroundHex, let bg = uiColor(hex: bgHex) {
+                // One line-hugging rounded bubble per line, filled as a single
+                // path so overlaps don't double-darken — the TikTok look.
+                let path = UIBezierPath()
+                let glyphRange = manager.glyphRange(for: container)
+                manager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, _, _ in
+                    var plate = usedRect.offsetBy(dx: origin.x, dy: origin.y)
+                    plate = plate.insetBy(dx: -fontSize * 0.3, dy: -fontSize * 0.12)
+                    let radius = min(plate.height / 2, fontSize * 0.38)
+                    path.append(UIBezierPath(roundedRect: plate, cornerRadius: radius))
+                }
                 bg.setFill()
-                let rect = CGRect(origin: .zero, size: canvas)
-                UIBezierPath(roundedRect: rect, cornerRadius: style.fontSize * 0.25).fill()
+                path.fill()
             }
-            _ = ctx // silence unused when no background
-            string.draw(with: CGRect(x: padding, y: padding + style.fontSize * 0.2,
-                                     width: bounds.width, height: bounds.height),
-                        options: [.usesLineFragmentOrigin, .usesFontLeading],
-                        context: nil)
+            let glyphRange = manager.glyphRange(for: container)
+            manager.drawGlyphs(forGlyphRange: glyphRange, at: origin)
         }
         guard let cg = image.cgImage else { return nil }
         return CIImage(cgImage: cg)

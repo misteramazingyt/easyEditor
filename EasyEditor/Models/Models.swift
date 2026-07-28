@@ -249,17 +249,20 @@ struct Transition: Codable, Equatable {
 // MARK: - Text
 
 struct TextStyleModel: Codable, Equatable {
-    var fontName: String = "HelveticaNeue-Bold"
+    var fontName: String = "TikTokSans-Bold"
     var fontSize: Double = 72          // points at 1080p canvas scale
     var colorHex: String = "#FFFFFF"
     var backgroundHex: String? = nil   // nil = no plate behind the text
     var hasShadow: Bool = true
+    /// TikTok-style heavy black stroke around the glyphs (optional so old
+    /// projects decode).
+    var outline: Bool? = nil
 
     static let title = TextStyleModel()
-    static let caption = TextStyleModel(fontName: "HelveticaNeue-Medium",
+    static let caption = TextStyleModel(fontName: "TikTokSans-SemiBold",
                                         fontSize: 44,
                                         colorHex: "#FFFFFF",
-                                        backgroundHex: "#000000AA",
+                                        backgroundHex: "#000000B4",
                                         hasShadow: false)
 }
 

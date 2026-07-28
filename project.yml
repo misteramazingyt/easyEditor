@@ -23,6 +23,7 @@ targets:
       path: EasyEditor/Info.plist
       properties:
         UILaunchScreen: {}
+        UIAppFonts: [TikTokSans.ttf]
         NSMicrophoneUsageDescription: "EasyEditor needs microphone access to record voiceovers."
         NSPhotoLibraryAddUsageDescription: "EasyEditor needs permission to save exported videos to your Photos library."
         NSSpeechRecognitionUsageDescription: "EasyEditor uses speech recognition to generate automatic captions from your clips."
