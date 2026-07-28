@@ -25,6 +25,26 @@ struct VideoProject: Identifiable, Codable, Equatable {
         return clips.filter { $0.lane == lane }.sorted { $0.offset < $1.offset }
     }
 
+    /// Connected clips occupying one stacking slot (+n above, -n below).
+    func clips(stackedAt index: Int) -> [TimelineClip] {
+        clips.filter { $0.lane != .primary && $0.stackIndex == index }
+            .sorted { $0.offset < $1.offset }
+    }
+
+    /// Highest occupied slot above the storyline (0 if none).
+    var maxStackAbove: Int {
+        clips.filter { $0.lane != .primary }.map(\.stackIndex).filter { $0 > 0 }.max() ?? 0
+    }
+
+    /// Lowest occupied slot below the storyline (0 if none).
+    var minStackBelow: Int {
+        clips.filter { $0.lane != .primary }.map(\.stackIndex).filter { $0 < 0 }.min() ?? 0
+    }
+
+    var hasAudioClips: Bool {
+        clips.contains { [.music, .voiceover, .sfx].contains($0.kind) }
+    }
+
     /// Magnetic start time of every primary clip, accounting for transition
     /// overlaps (a transition pulls the next clip back so both have media
     /// during the blend).

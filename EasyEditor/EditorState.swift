@@ -304,6 +304,58 @@ final class EditorState: ObservableObject {
         }
     }
 
+    /// Move a clip to a stacking slot: 0 joins the magnetic storyline
+    /// (video only); +n floats above it; -n sits below with the audio.
+    /// If the target slot is occupied at that time, the clip bumps outward
+    /// to the nearest free slot, FCP style.
+    func moveToStack(_ id: UUID, rowIndex: Int, timelineTime: Double) {
+        guard var clip = project.clip(id) else { return }
+        if rowIndex == 0 {
+            guard clip.kind == .video else { return }
+            moveToLane(id, lane: .primary, timelineTime: timelineTime)
+            return
+        }
+        switch clip.kind {
+        case .video:
+            guard rowIndex >= 1 else { return }
+            clip.lane = .broll
+        case .image:
+            guard rowIndex >= 1 else { return }
+            clip.lane = .images
+        case .title:
+            guard rowIndex >= 1 else { return }
+            clip.lane = .titles
+        case .music, .voiceover, .sfx:
+            guard rowIndex <= -1 else { return }
+        }
+        if project.clip(id)?.lane == .primary {
+            clip.transitionToNext = nil
+        }
+        clip.offset = max(0, timelineTime)
+        clip.laneIndex = freeStackIndex(for: clip, desired: rowIndex)
+        project.update(clip)
+        project.renumberPrimary()
+    }
+
+    /// Walk outward from the desired slot until the clip's time range is free.
+    private func freeStackIndex(for clip: TimelineClip, desired: Int) -> Int {
+        let direction = desired > 0 ? 1 : -1
+        let start = clip.offset
+        let end = start + clip.effectiveDuration
+        var index = desired
+        for _ in 0..<24 {
+            let occupied = project.clips(stackedAt: index)
+                .contains { other in
+                    other.id != clip.id
+                        && other.offset < end
+                        && start < other.offset + other.effectiveDuration
+                }
+            if !occupied { return index }
+            index += direction
+        }
+        return index
+    }
+
     /// Move a clip into a different lane (the FCP "connect"/"overwrite" moves).
     /// `timelineTime` is where the clip should land.
     func moveToLane(_ id: UUID, lane: Lane, timelineTime: Double) {

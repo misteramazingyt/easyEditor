@@ -119,8 +119,10 @@ struct CompositionEngine {
         }
         guard placed.contains(where: { !$0.isBroll }) else { throw EngineError.noVideoContent }
 
-        // MARK: Connected b-roll (own track per clip; covers the storyline)
-        let brolls = project.clips(in: .broll).filter { $0.fileName != nil }
+        // MARK: Connected b-roll (own track per clip; stacks over the storyline)
+        let brolls = project.clips
+            .filter { $0.kind == .video && $0.lane != .primary && $0.fileName != nil }
+            .sorted { ($0.stackIndex, $0.offset) < ($1.stackIndex, $1.offset) }
         for clip in brolls {
             guard let fileName = clip.fileName,
                   let videoTrack = composition.addMutableTrack(withMediaType: .video,
@@ -164,7 +166,9 @@ struct CompositionEngine {
         }
 
         // MARK: Music / voiceover / SFX
-        let audioClips = project.clips.filter { $0.lane.isAudio && $0.fileName != nil }
+        let audioClips = project.clips.filter {
+            [.music, .voiceover, .sfx].contains($0.kind) && $0.fileName != nil
+        }
         for clip in audioClips {
             guard let fileName = clip.fileName,
                   let audioTrack = composition.addMutableTrack(withMediaType: .audio,
@@ -297,8 +301,9 @@ struct CompositionEngine {
                                           regionStart: 0, regionEnd: 0))
             }
 
-            // B-roll covers the storyline while active.
-            for broll in placed where broll.isBroll {
+            // Connected video layers stack over the storyline, lowest slot first.
+            for broll in placed.filter({ $0.isBroll })
+                .sorted(by: { $0.clip.stackIndex < $1.clip.stackIndex }) {
                 if broll.start - epsilon <= mid && mid < broll.end - epsilon {
                     layers.append(layerConfig(for: broll, t0: t0, t1: t1,
                                               role: .solo, style: .none,
@@ -306,11 +311,9 @@ struct CompositionEngine {
                 }
             }
 
-            // Overlays: images first, then titles on top.
+            // Still overlays (images/titles), lowest stacking slot first.
             var overlays: [CompositorOverlay] = []
-            for clip in overlayClips.sorted(by: { a, b in
-                (a.kind == .image ? 0 : 1) < (b.kind == .image ? 0 : 1)
-            }) {
+            for clip in overlayClips.sorted(by: { $0.stackIndex < $1.stackIndex }) {
                 let start = clip.offset, end = clip.offset + clip.effectiveDuration
                 if start - epsilon <= mid && mid < end - epsilon,
                    let image = overlayImages[clip.id] {

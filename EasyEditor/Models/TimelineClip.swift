@@ -25,6 +25,25 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     /// Sort key within the primary storyline — used for primary clips only.
     var order: Int = 0
 
+    /// FCP-style stacking slot for connected clips: +1, +2, … above the
+    /// storyline (visuals), -1, -2, … below (audio). Optional so projects
+    /// saved before unlimited stacking still decode.
+    var laneIndex: Int?
+
+    /// Effective stacking slot (0 = the primary storyline itself).
+    var stackIndex: Int {
+        if lane == .primary { return 0 }
+        if let laneIndex { return laneIndex }
+        switch lane {
+        case .broll: return 1
+        case .images: return 2
+        case .titles: return 3
+        case .voice: return -1
+        case .music: return -2
+        case .primary: return 0
+        }
+    }
+
     var speed: Double = 1          // 0.3 ... 3, video/audio only
     var volume: Double = 1
     var isMuted = false
