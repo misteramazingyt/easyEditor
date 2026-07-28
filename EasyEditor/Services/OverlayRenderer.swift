@@ -61,11 +61,22 @@ enum OverlayRenderer {
         return CIImage(cgImage: cg)
     }
 
-    /// Load a still image clip from disk at a sane size for compositing.
-    static func render(imageURL: URL) -> CIImage? {
+    /// Load a still image clip from disk at a sane size for compositing,
+    /// optionally removing its background.
+    static func render(imageURL: URL, cutout: CutoutMode? = nil) -> CIImage? {
         guard let ui = UIImage(contentsOfFile: imageURL.path)?.scaledDown(maxDimension: 2160),
               let cg = ui.cgImage else { return nil }
-        return CIImage(cgImage: cg)
+        let image = CIImage(cgImage: cg)
+        switch cutout {
+        case .none:
+            return image
+        case .subject, .person:
+            return CutoutService.subjectCutout(cgImage: cg) ?? image
+        case .whiteKey:
+            return CutoutService.colorKeyed(image, removeWhite: true)
+        case .blackKey:
+            return CutoutService.colorKeyed(image, removeWhite: false)
+        }
     }
 
     private static func uiColor(hex: String) -> UIColor? {

@@ -23,6 +23,7 @@ struct CompositorLayer {
     var isFlippedH = false
     var effect: EffectPreset?
     var mask: MaskSettings?
+    var cutout: CutoutMode?
 
     // Connected-clip motion (zero clipEnd = no motion evaluation).
     var clipStart: Double = 0
@@ -121,6 +122,18 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         for layer in instruction.layers {
             guard let buffer = request.sourceFrame(byTrackID: layer.trackID) else { continue }
             var image = CIImage(cvPixelBuffer: buffer)
+
+            // 0. Background removal, on the raw buffer so masks stay aligned.
+            if let cutout = layer.cutout {
+                switch cutout {
+                case .person, .subject:
+                    image = CutoutService.personMasked(image, buffer: buffer)
+                case .whiteKey:
+                    image = CutoutService.colorKeyed(image, removeWhite: true)
+                case .blackKey:
+                    image = CutoutService.colorKeyed(image, removeWhite: false)
+                }
+            }
 
             // 1. Orientation from the source track. preferredTransform is in
             //    video space (y down); Core Image's y points up, so the same

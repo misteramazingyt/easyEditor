@@ -281,6 +281,25 @@ struct OverlayPlacement: Codable, Equatable {
     static let image = OverlayPlacement(centerX: 0.5, centerY: 0.5, widthFraction: 0.6)
 }
 
+// MARK: - Background removal
+
+enum CutoutMode: String, Codable, CaseIterable, Identifiable {
+    case person = "Person"        // Vision person segmentation, per frame
+    case subject = "Auto Subject" // Vision subject lift (images)
+    case whiteKey = "White BG"    // key out near-white
+    case blackKey = "Black BG"    // key out near-black
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .person: return "person.crop.rectangle"
+        case .subject: return "wand.and.rays"
+        case .whiteKey: return "square.dashed"
+        case .blackKey: return "square.dashed.inset.filled"
+        }
+    }
+}
+
 // MARK: - Easing
 
 enum EasingCurve: String, Codable, CaseIterable, Identifiable {

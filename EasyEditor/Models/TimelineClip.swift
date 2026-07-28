@@ -69,6 +69,9 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     var compositing: CompositingSettings?
     var focus: FocusStyle?
 
+    /// Background removal (person segmentation / subject lift / color key).
+    var cutout: CutoutMode?
+
     /// Transition into the *next* primary clip (primary storyline only).
     var transitionToNext: Transition?
 

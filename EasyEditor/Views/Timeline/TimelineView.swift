@@ -183,7 +183,10 @@ struct TimelineView: View {
                     .offset(y: target.y)
             }
 
-            ForEach(rows) { rowEntry in
+            // Taller rows first, shortest last: ZStack hit-testing prefers
+            // later views, so tiny title/image chips win over the storyline
+            // when their (expanded) tap targets overlap.
+            ForEach(rows.sorted { $0.height > $1.height }) { rowEntry in
                 let clips = rowEntry.index == 0
                     ? editor.project.primaryClips
                     : editor.project.clips(stackedAt: rowEntry.index)
@@ -214,6 +217,7 @@ struct TimelineView: View {
                      onTrim: { edge, delta, ended in
                          handleTrim(clip: clip, edge: edge, deltaPoints: delta, pps: pps, ended: ended)
                      })
+            .contentShape(Rectangle().inset(by: height < 26 ? -9 : 0))
             .offset(x: CGFloat(start) * pps, y: restingY)
             .offset(isDragging ? dragTranslation : .zero)
             .scaleEffect(isDragging ? 1.04 : 1)

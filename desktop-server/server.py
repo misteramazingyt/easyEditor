@@ -70,7 +70,21 @@ def resolve_safe(rel_or_abs: str) -> Path | None:
     return None
 
 
-def make_thumb(path: Path, size: int = 384) -> bytes | None:
+_PLACEHOLDER: bytes | None = None
+
+
+def placeholder_jpeg() -> bytes:
+    """Tiny dark-gray JPEG used when a thumbnail can't be generated."""
+    global _PLACEHOLDER
+    if _PLACEHOLDER is None:
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", (64, 64), (40, 42, 48)).save(buf, "JPEG", quality=70)
+        _PLACEHOLDER = buf.getvalue()
+    return _PLACEHOLDER
+
+
+def make_thumb(path: Path, size: int = 320) -> bytes | None:
     """JPEG thumbnail, cached by path+mtime. Falls back to None on failure."""
     try:
         stat = path.stat()
@@ -287,11 +301,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_browse(self, params):
         rel = params.get("path", [""])[0]
+        limit = min(500, int(params.get("limit", ["200"])[0]))
+        offset = int(params.get("offset", ["0"])[0])
         target = resolve_safe(rel) if rel else STATE["library"]
         if target is None or not target.is_dir():
             self.send_json({"error": "bad path"}, status=400)
             return
         folders, images = [], []
+        total_images = 0
         try:
             entries = sorted(os.scandir(target), key=lambda e: e.name.lower())
         except OSError as e:
@@ -304,11 +321,12 @@ class Handler(BaseHTTPRequestHandler):
             if entry.is_dir():
                 folders.append(name)
             elif Path(name).suffix.lower() in SUPPORTED:
-                images.append({"path": str(Path(entry.path)), "name": name})
-            if len(images) >= 1000:
-                break
+                total_images += 1
+                if total_images > offset and len(images) < limit:
+                    images.append({"path": str(Path(entry.path)), "name": name})
         self.send_json({"folders": folders, "images": images,
-                        "path": str(target)})
+                        "path": str(target),
+                        "totalImages": total_images, "offset": offset})
 
     def handle_search(self, params):
         query = params.get("q", [""])[0].strip()
@@ -377,8 +395,10 @@ class Handler(BaseHTTPRequestHandler):
         if data is not None:
             self.send_bytes(data, "image/jpeg")
             return
-        # Fallback: serve the original (iOS decodes HEIC and friends natively).
-        self.serve_original(path)
+        # Never serve the original as a "thumb" — multi-MB files were the
+        # main source of timeouts. Send a tiny placeholder instead; the full
+        # image is still available via /file.
+        self.send_bytes(placeholder_jpeg(), "image/jpeg")
 
     def handle_file(self, params):
         path = resolve_safe(params.get("path", [""])[0])
@@ -422,6 +442,15 @@ def main() -> None:
     STATE["library"] = library
     STATE["token"] = args.token
     STATE["search_lock"] = threading.Lock()
+
+    # HEIC/AVIF thumbnails need pillow-heif; degrade gracefully without it.
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+        log.info("pillow-heif enabled (HEIC/AVIF thumbnails)")
+    except ImportError:
+        log.info("pillow-heif not installed — HEIC thumbs will show placeholders "
+                 "(pip install pillow-heif to fix)")
 
     roots = {library}
     try:

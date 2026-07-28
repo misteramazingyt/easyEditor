@@ -3,7 +3,7 @@ import SwiftUI
 /// Which tool sheet is open for the selected clip.
 enum ClipTool: String, Identifiable {
     case speed, volume, filters, effects, adjust, retouch, mask, opacity, more
-    case inOut, animate, composite
+    case inOut, animate, composite, cutout
     var id: String { rawValue }
 }
 
@@ -50,6 +50,9 @@ struct SelectedClipToolbar: View {
             tile("In/Out", "arrow.down.right.and.arrow.up.left") { activeTool = .inOut }
             tile("Animate", "sparkles.rectangle.stack") { activeTool = .animate }
             tile("Composite", "square.3.layers.3d") { activeTool = .composite }
+        }
+        if clip.kind == .video || clip.kind == .image {
+            tile("Cut Out", "person.and.background.dotted") { activeTool = .cutout }
         }
 
         if clip.kind == .video {

@@ -276,15 +276,48 @@ final class EditorState: ObservableObject {
 
     /// Split the clip under the playhead at the playhead.
     func splitClip(_ id: UUID) {
-        guard var first = project.clip(id) else { return }
-        let time = playback.currentTime
-        let start = project.start(of: first)
-        let local = time - start
-        guard local > 0.1, local < first.effectiveDuration - 0.1 else {
+        guard let clip = project.clip(id) else { return }
+        guard canSplit(clip, at: playback.currentTime) else {
             errorMessage = "Move the playhead inside the clip to split it."
             return
         }
         pushUndo()
+        performSplit(clip, at: playback.currentTime)
+    }
+
+    /// Scissors: split every clip under the playhead — storyline and
+    /// connected clips alike — in one stroke.
+    func splitAllAtPlayhead() {
+        let time = playback.currentTime
+        let candidates = project.clips.filter { canSplit($0, at: time) }
+        guard !candidates.isEmpty else {
+            errorMessage = "No clips under the playhead to split."
+            return
+        }
+        pushUndo()
+        // Primary clips descending by order so the +1 shifts from earlier
+        // splits never touch clips we haven't processed yet.
+        let primaries = candidates.filter { $0.lane == .primary }
+            .sorted { $0.order > $1.order }
+        let connected = candidates.filter { $0.lane != .primary }
+        for clip in primaries + connected {
+            if let current = project.clip(clip.id) {
+                performSplit(current, at: time)
+            }
+        }
+        showToast("Split \(candidates.count) clip\(candidates.count == 1 ? "" : "s")")
+        Haptics.drop()
+    }
+
+    private func canSplit(_ clip: TimelineClip, at time: Double) -> Bool {
+        let local = time - project.start(of: clip)
+        return local > 0.1 && local < clip.effectiveDuration - 0.1
+    }
+
+    private func performSplit(_ clip: TimelineClip, at time: Double) {
+        var first = clip
+        let start = project.start(of: first)
+        let local = time - start
         var second = first
         second.id = UUID()
         switch first.kind {

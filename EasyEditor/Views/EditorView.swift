@@ -118,6 +118,7 @@ struct EditorView: View {
                 case .inOut: InOutSheet()
                 case .animate: AnimationSheet()
                 case .composite: CompositingSheet()
+                case .cutout: CutoutSheet()
                 case .more: ClipInspectorView()
                 }
             }
@@ -301,6 +302,12 @@ struct EditorView: View {
                         .font(.title3)
                 }
                 .disabled(editor.project.primaryClips.isEmpty)
+                Button {
+                    editor.splitAllAtPlayhead()
+                } label: {
+                    Image(systemName: "scissors").font(.title3)
+                }
+                .disabled(editor.project.clips.isEmpty)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

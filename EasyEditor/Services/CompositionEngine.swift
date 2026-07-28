@@ -225,7 +225,7 @@ struct CompositionEngine {
             case .image:
                 if let fileName = clip.fileName {
                     let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
-                    if let image = OverlayRenderer.render(imageURL: url) {
+                    if let image = OverlayRenderer.render(imageURL: url, cutout: clip.cutout) {
                         result[clip.id] = image
                     }
                 }
@@ -431,7 +431,8 @@ struct CompositionEngine {
                                     rotationQuarterTurns: clip.rotationQuarterTurns,
                                     isFlippedH: clip.isFlippedH,
                                     effect: clip.effect,
-                                    mask: clip.mask)
+                                    mask: clip.mask,
+                                    cutout: clip.cutout)
         layer.startOpacity = clip.effectiveOpacity
         layer.endOpacity = clip.effectiveOpacity
         guard role != .solo, regionEnd > regionStart else { return layer }
