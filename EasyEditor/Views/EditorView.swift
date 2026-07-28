@@ -21,6 +21,8 @@ struct EditorView: View {
     @State private var transitionAfterClipID: UUID?
     @State private var activeTool: ClipTool?
     @State private var showTimelinePicker = false
+    @State private var showMediaMenu = false
+    @State private var showWebSearch = false
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -50,7 +52,7 @@ struct EditorView: View {
                     .environmentObject(editor)
             } else {
                 ToolbarView(
-                    pickedMedia: $pickedMedia,
+                    onMedia: { showMediaMenu = true },
                     onMusic: { showMusicImporter = true },
                     onTitle: { textSheetIsTitle = true; showTextSheet = true },
                     onSFX: { showSFXSheet = true },
@@ -121,6 +123,24 @@ struct EditorView: View {
                       selection: $pickedMedia,
                       maxSelectionCount: 20,
                       matching: .any(of: [.videos, .images]))
+        .confirmationDialog("Add media", isPresented: $showMediaMenu, titleVisibility: .visible) {
+            Button {
+                showTimelinePicker = true
+            } label: {
+                Label("Camera Roll", systemImage: "photo.on.rectangle")
+            }
+            Button {
+                showWebSearch = true
+            } label: {
+                Label("Web Search", systemImage: "globe")
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showWebSearch) {
+            WebImageSearchSheet { image in
+                await editor.importWebImage(from: image.fullURL)
+            }
+        }
         .fullScreenCover(isPresented: $showFullscreen) {
             ZStack(alignment: .topTrailing) {
                 Color.black.ignoresSafeArea()

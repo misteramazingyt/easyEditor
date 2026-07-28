@@ -105,8 +105,19 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             guard let buffer = request.sourceFrame(byTrackID: layer.trackID) else { continue }
             var image = CIImage(cvPixelBuffer: buffer)
 
-            // 1. Orientation from the source track.
-            image = image.transformed(by: layer.orientation)
+            // 1. Orientation from the source track. preferredTransform is in
+            //    video space (y down); Core Image's y points up, so the same
+            //    matrix rotates the wrong way — apply the *negated* rotation
+            //    angle instead (and preserve any mirroring). Translation is
+            //    irrelevant because we re-origin afterwards.
+            let t = layer.orientation
+            let angle = atan2(t.b, t.a)
+            let mirrored = (t.a * t.d - t.b * t.c) < 0
+            if angle != 0 || mirrored {
+                var orient = CGAffineTransform(rotationAngle: -angle)
+                if mirrored { orient = orient.scaledBy(x: -1, y: 1) }
+                image = image.transformed(by: orient)
+            }
             image = image.transformed(by: CGAffineTransform(
                 translationX: -image.extent.minX, y: -image.extent.minY))
 

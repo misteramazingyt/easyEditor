@@ -49,12 +49,7 @@ struct MediaImportService {
         }
         do {
             if let data = try await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
-                let fileName = UUID().uuidString + ".jpg"
-                let dest = FilePaths.mediaURL(projectID: projectID, fileName: fileName)
-                let scaled = image.scaledDown(maxDimension: 2160)
-                guard let jpeg = scaled.jpegData(compressionQuality: 0.9) else { return nil }
-                try jpeg.write(to: dest, options: .atomic)
+               let fileName = saveImageData(data, projectID: projectID) {
                 return .image(fileName: fileName)
             }
         } catch {
@@ -66,6 +61,23 @@ struct MediaImportService {
         }
         Log.importer.error("No usable representation for picker item")
         return nil
+    }
+
+    /// Decode image data (Photos pick or web download), downscale, and store
+    /// it in the project. Returns the stored file name.
+    func saveImageData(_ data: Data, projectID: UUID) -> String? {
+        guard let image = UIImage(data: data) else { return nil }
+        let fileName = UUID().uuidString + ".jpg"
+        let dest = FilePaths.mediaURL(projectID: projectID, fileName: fileName)
+        let scaled = image.scaledDown(maxDimension: 2160)
+        guard let jpeg = scaled.jpegData(compressionQuality: 0.9) else { return nil }
+        do {
+            try jpeg.write(to: dest, options: .atomic)
+            return fileName
+        } catch {
+            Log.importer.error("Image write failed: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     /// Copy a video file (already on disk) into the project and probe it.

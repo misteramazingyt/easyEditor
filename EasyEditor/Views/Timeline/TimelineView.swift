@@ -22,7 +22,8 @@ struct TimelineView: View {
     private let primaryHeight: CGFloat = 56
     private let rowGap: CGFloat = 3
     private let rulerHeight: CGFloat = 18
-    private let maxViewportRows: CGFloat = 250
+    /// Fixed rows-viewport height: stacks taller than this scroll vertically.
+    private let viewportRowsHeight: CGFloat = 172
 
     private struct Row: Identifiable {
         let index: Int      // stacking slot; 0 = storyline
@@ -107,7 +108,7 @@ struct TimelineView: View {
     var body: some View {
         let rows = rows
         let rowsContentHeight = rowsHeight(rows)
-        let viewportRows = min(rowsContentHeight, maxViewportRows)
+        let viewportRows = viewportRowsHeight
         let totalHeight = rulerHeight + viewportRows
 
         return GeometryReader { geo in
@@ -290,9 +291,9 @@ struct TimelineView: View {
                 let deltaTime = Double(-value.translation.width / pps)
                 editor.scrub(to: panStart.time + deltaTime)
                 // Finger down = content down = show higher stack rows.
+                // Clamp so scrollY = primaryTop - anchor stays in [0, maxScroll].
                 let proposedAnchor = panStart.anchor + value.translation.height
-                let low = primaryTop - maxScroll
-                anchorFromTop = min(max(proposedAnchor, low), max(primaryTop, viewportRows - 30))
+                anchorFromTop = min(max(proposedAnchor, primaryTop - maxScroll), primaryTop)
             }
             .onEnded { _ in
                 panStart = nil

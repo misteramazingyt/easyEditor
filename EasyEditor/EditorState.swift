@@ -147,7 +147,9 @@ final class EditorState: ObservableObject {
                     project.append(.video(fileName: fileName, duration: duration,
                                           order: project.nextPrimaryOrder))
                 case .image(let fileName):
-                    project.append(.image(fileName: fileName, at: playback.currentTime))
+                    var clip = TimelineClip.image(fileName: fileName, at: playback.currentTime)
+                    clip.laneIndex = freeStackIndex(for: clip, desired: 1)
+                    project.append(clip)
                 case .audio:
                     break
                 }
@@ -168,8 +170,10 @@ final class EditorState: ObservableObject {
                 errorMessage = "Couldn't import that audio file."
                 return
             }
-            project.append(.audio(kind: .music, fileName: fileName,
-                                  duration: duration, at: playback.currentTime))
+            var clip = TimelineClip.audio(kind: .music, fileName: fileName,
+                                          duration: duration, at: playback.currentTime)
+            clip.laneIndex = freeStackIndex(for: clip, desired: -1)
+            project.append(clip)
         }
     }
 
@@ -177,6 +181,7 @@ final class EditorState: ObservableObject {
         pushUndo()
         var clip = TimelineClip.title(payload, placement: placement, at: playback.currentTime)
         clip.trimEnd = 3
+        clip.laneIndex = freeStackIndex(for: clip, desired: 1)
         project.append(clip)
         selectedClipID = clip.id
     }
@@ -190,13 +195,37 @@ final class EditorState: ObservableObject {
         var clip = TimelineClip.audio(kind: .sfx, fileName: fileName,
                                       duration: duration, at: playback.currentTime)
         clip.lane = .voice
+        clip.laneIndex = freeStackIndex(for: clip, desired: -1)
         project.append(clip)
     }
 
     func addVoiceover(fileName: String, duration: Double, at offset: Double) {
         pushUndo()
-        project.append(.audio(kind: .voiceover, fileName: fileName,
-                              duration: duration, at: offset))
+        var clip = TimelineClip.audio(kind: .voiceover, fileName: fileName,
+                                      duration: duration, at: offset)
+        clip.laneIndex = freeStackIndex(for: clip, desired: -1)
+        project.append(clip)
+    }
+
+    /// Download a web image and drop it on the timeline at the playhead.
+    func importWebImage(from url: URL) async -> Bool {
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let fileName = importer.saveImageData(data, projectID: project.id) else {
+                errorMessage = "That image couldn't be decoded."
+                return false
+            }
+            pushUndo()
+            var clip = TimelineClip.image(fileName: fileName, at: playback.currentTime)
+            clip.laneIndex = freeStackIndex(for: clip, desired: 1)
+            project.append(clip)
+            selectedClipID = clip.id
+            showToast("Image added")
+            return true
+        } catch {
+            errorMessage = "Image download failed: \(error.localizedDescription)"
+            return false
+        }
     }
 
     // MARK: - Clip editing

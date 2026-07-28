@@ -1,10 +1,9 @@
 import SwiftUI
-import PhotosUI
 
-/// Bottom tool row, styled after the reference: blue tiles labeled
-/// Media · Music · Title · SFX · Voice · Text.
+/// Bottom tool row, TikTok style: each tool is a single dark rounded square
+/// with the icon and its label inside it.
 struct ToolbarView: View {
-    @Binding var pickedMedia: [PhotosPickerItem]
+    let onMedia: () -> Void
     let onMusic: () -> Void
     let onTitle: () -> Void
     let onSFX: () -> Void
@@ -12,22 +11,16 @@ struct ToolbarView: View {
     let onText: () -> Void
     let onCaptions: () -> Void
 
-    private let tileColor = Color(red: 0.2, green: 0.65, blue: 0.93)
-
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                PhotosPicker(selection: $pickedMedia,
-                             maxSelectionCount: 20,
-                             matching: .any(of: [.videos, .images])) {
-                    tile("Media", systemImage: "play.rectangle")
-                }
-                button("Music", systemImage: "music.note", action: onMusic)
-                button("Title", systemImage: "textformat.alt", action: onTitle)
-                button("SFX", systemImage: "waveform", action: onSFX)
-                button("Voice", systemImage: "mic", action: onVoice)
-                button("Text", systemImage: "textformat", action: onText)
-                button("Captions", systemImage: "captions.bubble", action: onCaptions)
+            HStack(spacing: 8) {
+                tile("Media", systemImage: "play.rectangle", action: onMedia)
+                tile("Music", systemImage: "music.note", action: onMusic)
+                tile("Title", systemImage: "textformat.alt", action: onTitle)
+                tile("SFX", systemImage: "waveform", action: onSFX)
+                tile("Voice", systemImage: "mic", action: onVoice)
+                tile("Text", systemImage: "textformat", action: onText)
+                tile("Captions", systemImage: "captions.bubble", action: onCaptions)
             }
             .padding(.horizontal, 12)
         }
@@ -37,25 +30,20 @@ struct ToolbarView: View {
         .background(Color(red: 0.03, green: 0.04, blue: 0.06))
     }
 
-    private func button(_ label: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func tile(_ label: String, systemImage: String,
+                      action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            tile(label, systemImage: systemImage)
+            VStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.white)
+            .frame(width: 62, height: 58)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
-    }
-
-    private func tile(_ label: String, systemImage: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(tileColor)
-                .frame(width: 46, height: 34)
-                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 9))
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 50, height: 15)
-                .background(tileColor, in: RoundedRectangle(cornerRadius: 4))
-        }
     }
 }
