@@ -114,6 +114,9 @@ struct EditorView: View {
                 case .retouch: RetouchSheet()
                 case .mask: MaskSheet()
                 case .opacity: OpacitySheet()
+                case .inOut: InOutSheet()
+                case .animate: AnimationSheet()
+                case .composite: CompositingSheet()
                 case .more: ClipInspectorView()
                 }
             }

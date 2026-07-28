@@ -3,6 +3,7 @@ import SwiftUI
 /// Which tool sheet is open for the selected clip.
 enum ClipTool: String, Identifiable {
     case speed, volume, filters, effects, adjust, retouch, mask, opacity, more
+    case inOut, animate, composite
     var id: String { rawValue }
 }
 
@@ -43,6 +44,13 @@ struct SelectedClipToolbar: View {
     @ViewBuilder
     private func tiles(for clip: TimelineClip) -> some View {
         tile("Split", "square.split.2x1") { editor.splitClip(clip.id) }
+
+        // Motion tools — connected clips only, never the main track.
+        if clip.lane != .primary && clip.isVisual {
+            tile("In/Out", "arrow.down.right.and.arrow.up.left") { activeTool = .inOut }
+            tile("Animate", "sparkles.rectangle.stack") { activeTool = .animate }
+            tile("Composite", "square.3.layers.3d") { activeTool = .composite }
+        }
 
         if clip.kind == .video {
             tile("Speed", "gauge.with.needle") { activeTool = .speed }

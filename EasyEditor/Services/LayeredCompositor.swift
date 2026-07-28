@@ -23,12 +23,29 @@ struct CompositorLayer {
     var isFlippedH = false
     var effect: EffectPreset?
     var mask: MaskSettings?
+
+    // Connected-clip motion (zero clipEnd = no motion evaluation).
+    var clipStart: Double = 0
+    var clipEnd: Double = 0
+    var inOut: InOutSettings?
+    var loop: LoopAnimationSettings?
+    var compositing: CompositingSettings?
+
+    // Main-track focus treatment, linear ramp across the instruction.
+    var focusStyle: FocusStyle?
+    var focusStart: Double = 0
+    var focusEnd: Double = 0
 }
 
 /// A pre-rendered still (title text or image clip) composited on top.
 struct CompositorOverlay {
     var image: CIImage
     var placement: OverlayPlacement
+    var clipStart: Double = 0
+    var clipEnd: Double = 0
+    var inOut: InOutSettings?
+    var loop: LoopAnimationSettings?
+    var compositing: CompositingSettings?
 }
 
 final class CompositorInstruction: NSObject, AVVideoCompositionInstructionProtocol {
@@ -200,6 +217,27 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 image = Self.applyMask(mask, to: image, canvas: canvas)
             }
 
+            // Main-track focus (blur/darken/pixelate under connected clips).
+            if let style = layer.focusStyle {
+                let amount = layer.focusStart + (layer.focusEnd - layer.focusStart) * progress
+                image = Self.applyFocus(style, amount: amount, to: image, canvas: canvas)
+            }
+
+            // Connected-clip entrance/exit + looping motion.
+            if layer.clipEnd > layer.clipStart {
+                let time = request.compositionTime.seconds
+                let motion = MotionEvaluator.state(at: time,
+                                                  clipStart: layer.clipStart,
+                                                  clipEnd: layer.clipEnd,
+                                                  inOut: layer.inOut,
+                                                  loop: layer.loop,
+                                                  canvas: size)
+                image = Self.applyMotion(motion, to: image, canvas: canvas)
+                if let compositing = layer.compositing, compositing.effect != .none {
+                    image = Self.applyCompositing(compositing, to: image, canvas: canvas)
+                }
+            }
+
             // 5. Transition animation (slide/zoom) lerped across the interval.
             let tx = layer.startTranslationX + (layer.endTranslationX - layer.startTranslationX) * progress
             let animScale = layer.startScale + (layer.endScale - layer.startScale) * progress
@@ -227,21 +265,46 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         }
 
         // 7. Title / image overlays (Core Image y-axis points up, placements
-        //    use UIKit-style y-down unit coordinates).
+        //    use UIKit-style y-down unit coordinates), with per-frame motion.
         for overlay in instruction.overlays {
             var image = overlay.image
             let extent = image.extent
             guard extent.width > 0, extent.height > 0 else { continue }
+
+            var motion = MotionEvaluator.MotionState()
+            if overlay.clipEnd > overlay.clipStart {
+                motion = MotionEvaluator.state(at: request.compositionTime.seconds,
+                                               clipStart: overlay.clipStart,
+                                               clipEnd: overlay.clipEnd,
+                                               inOut: overlay.inOut,
+                                               loop: overlay.loop,
+                                               canvas: size)
+            }
+
             let targetWidth = size.width * CGFloat(overlay.placement.widthFraction)
             let scale = targetWidth / extent.width
-            let height = extent.height * scale
-            let centerX = size.width * CGFloat(overlay.placement.centerX)
-            let centerY = size.height * (1 - CGFloat(overlay.placement.centerY))
-            var t = CGAffineTransform(translationX: centerX - targetWidth / 2,
-                                      y: centerY - height / 2)
-            t = t.scaledBy(x: scale, y: scale)
-            t = t.translatedBy(x: -extent.minX, y: -extent.minY)
+            let centerX = size.width * CGFloat(overlay.placement.centerX) + motion.offset.x
+            let centerY = size.height * (1 - CGFloat(overlay.placement.centerY)) - motion.offset.y
+            var t = CGAffineTransform(translationX: centerX, y: centerY)
+            t = t.rotated(by: -motion.rotation)
+            t = t.scaledBy(x: scale * motion.scaleX, y: scale * motion.scaleY)
+            t = t.translatedBy(x: -extent.midX, y: -extent.midY)
             image = image.transformed(by: t)
+
+            if motion.pixellate > 0.5 {
+                image = image.clampedToExtent()
+                    .applyingFilter("CIPixellate", parameters: [
+                        kCIInputCenterKey: CIVector(x: image.extent.midX, y: image.extent.midY),
+                        kCIInputScaleKey: max(1, motion.pixellate),
+                    ])
+                    .cropped(to: image.extent)
+            }
+            if motion.glitchSeed != 0 {
+                image = Self.applyGlitch(to: image, shift: motion.glitchShift)
+            }
+            if let compositing = overlay.compositing, compositing.effect != .none {
+                image = Self.applyCompositing(compositing, to: image, canvas: canvas)
+            }
             if overlay.placement.opacity < 0.999 {
                 let a = CGFloat(max(0, overlay.placement.opacity))
                 image = image.applyingFilter("CIColorMatrix", parameters: [
@@ -257,6 +320,140 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         ciContext.render(result, to: output, bounds: canvas,
                          colorSpace: CGColorSpaceCreateDeviceRGB())
         request.finish(withComposedVideoFrame: output)
+    }
+
+    // MARK: - Motion, focus & compositing
+
+    /// Apply an evaluated motion state about the canvas center (video layers).
+    private static func applyMotion(_ motion: MotionEvaluator.MotionState,
+                                    to input: CIImage, canvas: CGRect) -> CIImage {
+        var image = input
+        if motion.pixellate > 0.5 {
+            image = image.clampedToExtent()
+                .applyingFilter("CIPixellate", parameters: [
+                    kCIInputCenterKey: CIVector(x: canvas.midX, y: canvas.midY),
+                    kCIInputScaleKey: max(1, motion.pixellate),
+                ])
+                .cropped(to: image.extent)
+        }
+        if !(motion.scaleX == 1 && motion.scaleY == 1 && motion.rotation == 0 && motion.offset == .zero) {
+            var t = CGAffineTransform(translationX: canvas.midX + motion.offset.x,
+                                      y: canvas.midY - motion.offset.y)
+            t = t.rotated(by: -motion.rotation)
+            t = t.scaledBy(x: max(0.0001, motion.scaleX), y: max(0.0001, motion.scaleY))
+            t = t.translatedBy(x: -canvas.midX, y: -canvas.midY)
+            image = image.transformed(by: t)
+        }
+        if motion.glitchSeed != 0 {
+            image = applyGlitch(to: image, shift: motion.glitchShift)
+        }
+        return image
+    }
+
+    /// Cheap RGB-split glitch: a red-channel copy shifted sideways.
+    private static func applyGlitch(to image: CIImage, shift: CGFloat) -> CIImage {
+        guard shift != 0 else { return image }
+        let red = image
+            .transformed(by: CGAffineTransform(translationX: shift, y: 0))
+            .applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: 1, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0.6),
+            ])
+        return red.applyingFilter("CIScreenBlendMode", parameters: [
+            kCIInputBackgroundImageKey: image,
+        ])
+    }
+
+    /// Focus treatment on the main track: blur / darken / pixelate ramps.
+    private static func applyFocus(_ style: FocusStyle, amount: Double,
+                                   to input: CIImage, canvas: CGRect) -> CIImage {
+        let a = min(1, max(0, amount))
+        guard a > 0.001 else { return input }
+        var image = input
+        let unit = min(canvas.width, canvas.height) / 1080
+        if style.blurs {
+            image = image.clampedToExtent()
+                .applyingFilter("CIGaussianBlur", parameters: [
+                    kCIInputRadiusKey: 30 * unit * a,
+                ])
+                .cropped(to: input.extent)
+        }
+        if style.pixelates {
+            image = image.clampedToExtent()
+                .applyingFilter("CIPixellate", parameters: [
+                    kCIInputCenterKey: CIVector(x: canvas.midX, y: canvas.midY),
+                    kCIInputScaleKey: 1 + 40 * unit * a,
+                ])
+                .cropped(to: input.extent)
+        }
+        if style.darkens {
+            let black = CIImage(color: CIColor(red: 0, green: 0, blue: 0,
+                                               alpha: 0.85 * a)).cropped(to: input.extent)
+            image = black.composited(over: image)
+        }
+        return image
+    }
+
+    /// Drop shadow / glow / outline / blur behind or on a positioned image.
+    private static func applyCompositing(_ cfg: CompositingSettings,
+                                         to image: CIImage, canvas: CGRect) -> CIImage {
+        let unit = min(canvas.width, canvas.height) / 1080
+        switch cfg.effect {
+        case .none:
+            return image
+        case .blur:
+            return image.applyingFilter("CIGaussianBlur", parameters: [
+                kCIInputRadiusKey: cfg.blur * unit,
+            ])
+        case .dropShadow, .glow, .outline:
+            let color = ciColor(hex: cfg.colorHex, alpha: cfg.opacity)
+            let clear = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0))
+                .cropped(to: canvas)
+            var silhouette = CIImage(color: color).cropped(to: canvas)
+                .applyingFilter("CIBlendWithAlphaMask", parameters: [
+                    kCIInputBackgroundImageKey: clear,
+                    kCIInputMaskImageKey: image.cropped(to: canvas),
+                ])
+            switch cfg.effect {
+            case .outline:
+                silhouette = silhouette.applyingFilter("CIMorphologyMaximum", parameters: [
+                    kCIInputRadiusKey: max(1, (cfg.spread + 3) * unit),
+                ]).cropped(to: canvas)
+            case .glow:
+                silhouette = silhouette.applyingFilter("CIGaussianBlur", parameters: [
+                    kCIInputRadiusKey: max(1, cfg.blur * unit),
+                ]).cropped(to: canvas)
+            default: // drop shadow
+                if cfg.spread > 0 {
+                    silhouette = silhouette.applyingFilter("CIMorphologyMaximum", parameters: [
+                        kCIInputRadiusKey: cfg.spread * unit,
+                    ]).cropped(to: canvas)
+                }
+                silhouette = silhouette
+                    .applyingFilter("CIGaussianBlur", parameters: [
+                        kCIInputRadiusKey: max(0.5, cfg.blur * unit),
+                    ])
+                    .transformed(by: CGAffineTransform(translationX: cfg.offsetX * unit,
+                                                       y: -cfg.offsetY * unit))
+                    .cropped(to: canvas)
+            }
+            return image.composited(over: silhouette)
+        }
+    }
+
+    private static func ciColor(hex: String, alpha: Double) -> CIColor {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6 || s.count == 8, let v = UInt64(s, radix: 16) else {
+            return CIColor(red: 0, green: 0, blue: 0, alpha: alpha)
+        }
+        let hasAlpha = s.count == 8
+        let r = CGFloat((v >> (hasAlpha ? 24 : 16)) & 0xFF) / 255
+        let g = CGFloat((v >> (hasAlpha ? 16 : 8)) & 0xFF) / 255
+        let b = CGFloat((v >> (hasAlpha ? 8 : 0)) & 0xFF) / 255
+        return CIColor(red: r, green: g, blue: b, alpha: alpha)
     }
 
     // MARK: - Effects

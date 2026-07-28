@@ -565,6 +565,59 @@ final class EditorState: ObservableObject {
         }
     }
 
+    // MARK: - Connected-clip motion (In/Out, loop animation, compositing)
+
+    /// Live-update a clip's In/Out settings; when Global is on, mirror them
+    /// (plus focus) onto every other connected visual clip.
+    func updateInOut(_ id: UUID, _ change: (inout InOutSettings) -> Void) {
+        guard var clip = project.clip(id) else { return }
+        var settings = clip.inOut ?? InOutSettings()
+        change(&settings)
+        clip.inOut = settings
+        project.update(clip)
+        if settings.isGlobal { syncGlobalMotion(from: clip) }
+    }
+
+    func setFocus(_ id: UUID, _ style: FocusStyle) {
+        guard var clip = project.clip(id) else { return }
+        clip.focus = style == .none ? nil : style
+        project.update(clip)
+        if clip.inOut?.isGlobal == true { syncGlobalMotion(from: clip) }
+    }
+
+    func updateLoop(_ id: UUID, _ change: (inout LoopAnimationSettings) -> Void) {
+        guard var clip = project.clip(id) else { return }
+        var settings = clip.loopFx ?? LoopAnimationSettings()
+        change(&settings)
+        clip.loopFx = settings
+        project.update(clip)
+        if settings.isGlobal { syncGlobalMotion(from: clip) }
+    }
+
+    func updateCompositing(_ id: UUID, _ change: (inout CompositingSettings) -> Void) {
+        guard var clip = project.clip(id) else { return }
+        var settings = clip.compositing ?? CompositingSettings()
+        change(&settings)
+        clip.compositing = settings
+        project.update(clip)
+    }
+
+    /// Global = identical settings on every connected visual clip.
+    private func syncGlobalMotion(from source: TimelineClip) {
+        for other in project.clips
+        where other.id != source.id && other.lane != .primary && other.isVisual {
+            var updated = other
+            if source.inOut?.isGlobal == true {
+                updated.inOut = source.inOut
+                updated.focus = source.focus
+            }
+            if source.loopFx?.isGlobal == true {
+                updated.loopFx = source.loopFx
+            }
+            project.update(updated)
+        }
+    }
+
     // MARK: - Transitions
 
     func setTransition(afterClipID id: UUID, _ transition: Transition?) {

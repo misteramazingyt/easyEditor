@@ -281,6 +281,212 @@ struct OverlayPlacement: Codable, Equatable {
     static let image = OverlayPlacement(centerX: 0.5, centerY: 0.5, widthFraction: 0.6)
 }
 
+// MARK: - Easing
+
+enum EasingCurve: String, Codable, CaseIterable, Identifiable {
+    case none, sine, quad, cubic, quart, quint, expo, circ, back, elastic, bounce
+    var id: String { rawValue }
+    var displayName: String { rawValue == "none" ? "None" : rawValue.capitalized }
+}
+
+// MARK: - In/Out entrance & exit animations (connected clips only)
+
+enum AnchorPoint: String, Codable, CaseIterable, Identifiable {
+    case topLeft, top, topRight, left, center, right, bottomLeft, bottom, bottomRight
+    var id: String { rawValue }
+
+    /// Off-screen direction in unit canvas coordinates (y down).
+    var direction: CGPoint {
+        switch self {
+        case .topLeft: return CGPoint(x: -1, y: -1)
+        case .top: return CGPoint(x: 0, y: -1)
+        case .topRight: return CGPoint(x: 1, y: -1)
+        case .left: return CGPoint(x: -1, y: 0)
+        case .center: return .zero
+        case .right: return CGPoint(x: 1, y: 0)
+        case .bottomLeft: return CGPoint(x: -1, y: 1)
+        case .bottom: return CGPoint(x: 0, y: 1)
+        case .bottomRight: return CGPoint(x: 1, y: 1)
+        }
+    }
+}
+
+enum SpeedPreset: String, Codable, CaseIterable, Identifiable {
+    case standard = "Default", snappy = "Snappy", clean = "Clean", slow = "Slow", custom = "Custom"
+    var id: String { rawValue }
+}
+
+enum MotionPresetChoice: String, Codable, CaseIterable, Identifiable {
+    case none = "None"
+    case leftRight = "Left → Right"
+    case rightLeft = "Right → Left"
+    case upDown = "Up → Down"
+    case downUp = "Down → Up"
+    case scaleRotation = "Scale+Rotation"
+    case custom = "Custom"
+    var id: String { rawValue }
+}
+
+/// One end of the clip (beginning or end): what animates and how.
+struct EndConfig: Codable, Equatable {
+    var anchor: AnchorPoint = .center
+    /// "In"/"Out" are the ends of the motion *curve*, not of the clip.
+    /// In = none gives the snappy default.
+    var easeIn: EasingCurve = .none
+    var easeOut: EasingCurve = .expo
+    var durationFrames: Double = 30      // at 30 fps
+    var animateScale = true
+    var animateRotation = false
+    var animatePosition = false
+    // Overrides for the hidden-end values (defaults per spec).
+    var scaleValue: Double = 0           // scale when fully hidden
+    var rotationDegrees: Double = 180    // begin animates from -this, end to +this
+    var positionDistance: Double = 1.1   // × canvas size, off-screen at anchor
+
+    var durationSeconds: Double { max(1, durationFrames) / 30 }
+}
+
+/// Focus treatment applied to the *main track* while this clip is visible.
+enum FocusStyle: String, Codable, CaseIterable, Identifiable {
+    case none = "None"
+    case blur = "Blur"
+    case darken = "Darken"
+    case blurDarken = "BL+DK"
+    case pixelate = "Pixelate"
+    case pixelateDarken = "PIX+DK"
+    var id: String { rawValue }
+
+    var blurs: Bool { self == .blur || self == .blurDarken }
+    var darkens: Bool { self == .darken || self == .blurDarken || self == .pixelateDarken }
+    var pixelates: Bool { self == .pixelate || self == .pixelateDarken }
+}
+
+struct InOutSettings: Codable, Equatable {
+    var isEnabled = true
+    var isGlobal = false
+    var speedPreset: SpeedPreset = .standard
+    var motionPreset: MotionPresetChoice = .none
+    var begin = EndConfig()
+    var end = EndConfig()
+
+    mutating func applySpeedPreset(_ preset: SpeedPreset) {
+        speedPreset = preset
+        let config: (frames: Double, easeIn: EasingCurve, easeOut: EasingCurve)
+        switch preset {
+        case .standard: config = (30, .none, .expo)
+        case .snappy: config = (8, .none, .back)
+        case .clean: config = (60, .expo, .expo)
+        case .slow: config = (30, .sine, .sine)
+        case .custom: return
+        }
+        begin.durationFrames = config.frames
+        begin.easeIn = config.easeIn
+        begin.easeOut = config.easeOut
+        end.durationFrames = config.frames
+        end.easeIn = config.easeIn
+        end.easeOut = config.easeOut
+    }
+
+    mutating func applyMotionPreset(_ preset: MotionPresetChoice) {
+        motionPreset = preset
+        func setMotion(beginAnchor: AnchorPoint, endAnchor: AnchorPoint,
+                       scale: Bool, rotation: Bool, position: Bool) {
+            begin.anchor = beginAnchor; end.anchor = endAnchor
+            begin.animateScale = scale; end.animateScale = scale
+            begin.animateRotation = rotation; end.animateRotation = rotation
+            begin.animatePosition = position; end.animatePosition = position
+        }
+        switch preset {
+        case .none: setMotion(beginAnchor: .center, endAnchor: .center,
+                              scale: true, rotation: false, position: false)
+        case .leftRight: setMotion(beginAnchor: .left, endAnchor: .right,
+                                   scale: false, rotation: false, position: true)
+        case .rightLeft: setMotion(beginAnchor: .right, endAnchor: .left,
+                                   scale: false, rotation: false, position: true)
+        case .upDown: setMotion(beginAnchor: .top, endAnchor: .bottom,
+                                scale: false, rotation: false, position: true)
+        case .downUp: setMotion(beginAnchor: .bottom, endAnchor: .top,
+                                scale: false, rotation: false, position: true)
+        case .scaleRotation: setMotion(beginAnchor: .center, endAnchor: .center,
+                                       scale: true, rotation: true, position: false)
+        case .custom: break
+        }
+    }
+}
+
+// MARK: - Looping animation (connected clips only)
+
+enum LoopPreset: String, Codable, CaseIterable, Identifiable {
+    case none = "None"
+    case shake = "Camera Shake"
+    case spin = "360 Spin"
+    case wobble = "Wobble"
+    case pulse = "Pulsation"
+    case floating = "Floating"
+    case pixelPulse = "Pixel Pulse"
+    case glitch = "Glitch"
+    case jello = "Jello"
+    case oscillation = "Oscillation"
+    var id: String { rawValue }
+}
+
+enum OscillationMode: String, Codable, CaseIterable, Identifiable {
+    case leftRight = "Left / Right"
+    case upDown = "Up / Down"
+    case rotation = "Rotation"
+    var id: String { rawValue }
+}
+
+enum LoopType: String, Codable, CaseIterable, Identifiable {
+    case pingPong = "Ping-Pong"
+    case restart = "Loop"
+    var id: String { rawValue }
+}
+
+struct LoopAnimationSettings: Codable, Equatable {
+    var preset: LoopPreset = .none
+    var isGlobal = false
+    var amount: Double = 18       // canvas points at 1080p scale (or degrees / %)
+    var speed: Double = 40        // period ≈ 60/speed seconds
+    var easing: EasingCurve = .sine
+    var loopType: LoopType = .pingPong
+    var phase: Double = 0         // seconds
+    var mode: OscillationMode = .leftRight
+
+    var period: Double { max(0.15, 60 / max(1, speed)) }
+}
+
+// MARK: - Compositing (drop shadow / glow / outline / blur)
+
+enum CompositingEffect: String, Codable, CaseIterable, Identifiable {
+    case none = "None"
+    case dropShadow = "Drop Shadow"
+    case glow = "Glow"
+    case outline = "Outline"
+    case blur = "Blur"
+    var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .none: return "circle.slash"
+        case .dropShadow: return "square.fill.on.square"
+        case .glow: return "rays"
+        case .outline: return "square.dashed"
+        case .blur: return "drop.halffull"
+        }
+    }
+}
+
+struct CompositingSettings: Codable, Equatable {
+    var effect: CompositingEffect = .dropShadow
+    var offsetX: Double = 12      // canvas points at 1080p scale
+    var offsetY: Double = 18
+    var blur: Double = 24
+    var opacity: Double = 0.75
+    var spread: Double = 0
+    var colorHex: String = "#000000"
+}
+
 // MARK: - Color helpers
 
 extension Color {

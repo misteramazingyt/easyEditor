@@ -61,6 +61,14 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     var effect: EffectPreset?
     var mask: MaskSettings?
 
+    /// Connected-clip motion: entrance/exit animation, looping animation,
+    /// compositing, and main-track focus while visible. All optional so old
+    /// saved projects still decode. Never applies to primary-storyline clips.
+    var inOut: InOutSettings?
+    var loopFx: LoopAnimationSettings?
+    var compositing: CompositingSettings?
+    var focus: FocusStyle?
+
     /// Transition into the *next* primary clip (primary storyline only).
     var transitionToNext: Transition?
 

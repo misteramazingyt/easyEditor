@@ -236,6 +236,54 @@ struct CompositionEngine {
         return result
     }
 
+    // MARK: - Focus windows (main-track blur/darken under connected clips)
+
+    /// Union of visibility ranges of focus-enabled connected clips: the fade
+    /// begins at the first clip's entrance and ends at the last clip's exit,
+    /// so overlapping clips never stack fades.
+    private struct FocusWindow {
+        var start: Double
+        var end: Double
+        var fadeIn: Double
+        var fadeOut: Double
+        var style: FocusStyle
+    }
+
+    private func focusWindows(project: VideoProject) -> [FocusWindow] {
+        let focusClips = project.clips
+            .filter { $0.lane != .primary && $0.isVisual && ($0.focus ?? FocusStyle.none) != FocusStyle.none }
+            .sorted { $0.offset < $1.offset }
+        var windows: [FocusWindow] = []
+        for clip in focusClips {
+            let start = clip.offset
+            let end = start + clip.effectiveDuration
+            let fadeIn = clip.inOut?.begin.durationSeconds ?? 0.3
+            let fadeOut = clip.inOut?.end.durationSeconds ?? 0.3
+            if let last = windows.last, start <= last.end + 0.01 {
+                windows[windows.count - 1].end = max(last.end, end)
+                if end >= windows[windows.count - 1].end - 0.001 {
+                    windows[windows.count - 1].fadeOut = fadeOut
+                }
+            } else {
+                windows.append(FocusWindow(start: start, end: end,
+                                           fadeIn: fadeIn, fadeOut: fadeOut,
+                                           style: clip.focus ?? .none))
+            }
+        }
+        return windows
+    }
+
+    private func focusAmount(_ window: FocusWindow, at t: Double) -> Double {
+        if t <= window.start || t >= window.end { return 0 }
+        if t < window.start + window.fadeIn {
+            return (t - window.start) / max(0.01, window.fadeIn)
+        }
+        if t > window.end - window.fadeOut {
+            return (window.end - t) / max(0.01, window.fadeOut)
+        }
+        return 1
+    }
+
     // MARK: - Instruction tiling
 
     private func buildInstructions(project: VideoProject,
@@ -266,6 +314,13 @@ struct CompositionEngine {
             boundaries.insert(quantize(clip.offset))
             boundaries.insert(quantize(clip.offset + clip.effectiveDuration))
         }
+        let windows = focusWindows(project: project)
+        for window in windows {
+            boundaries.insert(quantize(window.start))
+            boundaries.insert(quantize(min(window.end, window.start + window.fadeIn)))
+            boundaries.insert(quantize(max(window.start, window.end - window.fadeOut)))
+            boundaries.insert(quantize(window.end))
+        }
 
         let times = boundaries.map { Double($0) / 600.0 }
             .filter { $0 >= 0 && $0 <= duration + epsilon }
@@ -280,6 +335,14 @@ struct CompositionEngine {
             let mid = (t0 + t1) / 2
 
             var layers: [CompositorLayer] = []
+            let focusWindow = windows.first { $0.start - epsilon <= mid && mid < $0.end }
+
+            func applyFocus(_ layer: inout CompositorLayer) {
+                guard let focusWindow else { return }
+                layer.focusStyle = focusWindow.style
+                layer.focusStart = focusAmount(focusWindow, at: t0)
+                layer.focusEnd = focusAmount(focusWindow, at: t1)
+            }
 
             // Active primary clips (max two during a transition overlap).
             let active = primaries.filter { $0.start - epsilon <= mid && mid < $0.end - epsilon }
@@ -289,25 +352,37 @@ struct CompositionEngine {
                 let transition = outgoing.clip.transitionToNext ?? Transition()
                 let regionStart = incoming.start
                 let regionEnd = outgoing.end
-                layers.append(layerConfig(for: outgoing, t0: t0, t1: t1,
-                                          role: .outgoing, style: transition.style,
-                                          regionStart: regionStart, regionEnd: regionEnd))
-                layers.append(layerConfig(for: incoming, t0: t0, t1: t1,
-                                          role: .incoming, style: transition.style,
-                                          regionStart: regionStart, regionEnd: regionEnd))
+                var a = layerConfig(for: outgoing, t0: t0, t1: t1,
+                                    role: .outgoing, style: transition.style,
+                                    regionStart: regionStart, regionEnd: regionEnd)
+                var b = layerConfig(for: incoming, t0: t0, t1: t1,
+                                    role: .incoming, style: transition.style,
+                                    regionStart: regionStart, regionEnd: regionEnd)
+                applyFocus(&a)
+                applyFocus(&b)
+                layers.append(a)
+                layers.append(b)
             } else if let solo = active.first {
-                layers.append(layerConfig(for: solo, t0: t0, t1: t1,
-                                          role: .solo, style: .none,
-                                          regionStart: 0, regionEnd: 0))
+                var layer = layerConfig(for: solo, t0: t0, t1: t1,
+                                        role: .solo, style: .none,
+                                        regionStart: 0, regionEnd: 0)
+                applyFocus(&layer)
+                layers.append(layer)
             }
 
             // Connected video layers stack over the storyline, lowest slot first.
             for broll in placed.filter({ $0.isBroll })
                 .sorted(by: { $0.clip.stackIndex < $1.clip.stackIndex }) {
                 if broll.start - epsilon <= mid && mid < broll.end - epsilon {
-                    layers.append(layerConfig(for: broll, t0: t0, t1: t1,
-                                              role: .solo, style: .none,
-                                              regionStart: 0, regionEnd: 0))
+                    var layer = layerConfig(for: broll, t0: t0, t1: t1,
+                                            role: .solo, style: .none,
+                                            regionStart: 0, regionEnd: 0)
+                    layer.clipStart = broll.start
+                    layer.clipEnd = broll.end
+                    layer.inOut = broll.clip.inOut
+                    layer.loop = broll.clip.loopFx
+                    layer.compositing = broll.clip.compositing
+                    layers.append(layer)
                 }
             }
 
@@ -318,7 +393,12 @@ struct CompositionEngine {
                 if start - epsilon <= mid && mid < end - epsilon,
                    let image = overlayImages[clip.id] {
                     overlays.append(CompositorOverlay(image: image,
-                                                      placement: clip.placement ?? .image))
+                                                      placement: clip.placement ?? .image,
+                                                      clipStart: start,
+                                                      clipEnd: end,
+                                                      inOut: clip.inOut,
+                                                      loop: clip.loopFx,
+                                                      compositing: clip.compositing))
                 }
             }
 
