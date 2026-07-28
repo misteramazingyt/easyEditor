@@ -72,9 +72,18 @@ struct CompositionEngine {
             let audioTrack = index.isMultiple(of: 2) ? audioA : audioB
             let params = index.isMultiple(of: 2) ? paramsA : paramsB
 
-            let sourceRange = CMTimeRange(
+            let requested = CMTimeRange(
                 start: CMTime(seconds: clip.trimStart, preferredTimescale: Self.timescale),
                 end: CMTime(seconds: min(clip.trimEnd, clip.assetDuration), preferredTimescale: Self.timescale))
+            // Float rounding can push trimEnd a hair past the real media end,
+            // which makes insertTimeRange throw — clamp to the track's range.
+            let videoTrackRange = (try? await sourceVideo.load(.timeRange))
+                ?? CMTimeRange(start: .zero, duration: asset.duration)
+            let sourceRange = CMTimeRangeGetIntersection(requested, otherRange: videoTrackRange)
+            guard sourceRange.duration.seconds > 0.04 else {
+                Log.engine.error("Empty source range for \(fileName)")
+                continue
+            }
             let at = CMTime(seconds: start, preferredTimescale: Self.timescale)
             do {
                 try videoTrack.insertTimeRange(sourceRange, of: sourceVideo, at: at)
@@ -89,12 +98,16 @@ struct CompositionEngine {
             }
             if let sourceAudio = try? await asset.loadTracks(withMediaType: .audio).first {
                 do {
-                    try audioTrack.insertTimeRange(sourceRange, of: sourceAudio, at: at)
-                    if clip.speed != 1 {
-                        audioTrack.scaleTimeRange(CMTimeRange(start: at, duration: sourceRange.duration),
-                                                  toDuration: effective)
+                    let audioTrackRange = (try? await sourceAudio.load(.timeRange)) ?? videoTrackRange
+                    let audioRange = CMTimeRangeGetIntersection(sourceRange, otherRange: audioTrackRange)
+                    if audioRange.duration.seconds > 0.04 {
+                        try audioTrack.insertTimeRange(audioRange, of: sourceAudio, at: at)
+                        if clip.speed != 1 {
+                            audioTrack.scaleTimeRange(CMTimeRange(start: at, duration: audioRange.duration),
+                                                      toDuration: effective)
+                        }
+                        params.setVolume(clip.isMuted ? 0 : Float(clip.volume), at: at)
                     }
-                    params.setVolume(clip.isMuted ? 0 : Float(clip.volume), at: at)
                 } catch {
                     Log.engine.error("Audio insert failed: \(error.localizedDescription)")
                 }
@@ -116,9 +129,13 @@ struct CompositionEngine {
             let asset = AVURLAsset(url: url)
             guard let sourceVideo = try? await asset.loadTracks(withMediaType: .video).first else { continue }
             let orientation = (try? await sourceVideo.load(.preferredTransform)) ?? .identity
-            let sourceRange = CMTimeRange(
+            let requested = CMTimeRange(
                 start: CMTime(seconds: clip.trimStart, preferredTimescale: Self.timescale),
                 end: CMTime(seconds: min(clip.trimEnd, clip.assetDuration), preferredTimescale: Self.timescale))
+            let trackRange = (try? await sourceVideo.load(.timeRange))
+                ?? CMTimeRange(start: .zero, duration: asset.duration)
+            let sourceRange = CMTimeRangeGetIntersection(requested, otherRange: trackRange)
+            guard sourceRange.duration.seconds > 0.04 else { continue }
             let at = CMTime(seconds: clip.offset, preferredTimescale: Self.timescale)
             do {
                 try videoTrack.insertTimeRange(sourceRange, of: sourceVideo, at: at)
@@ -155,9 +172,13 @@ struct CompositionEngine {
             let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
             let asset = AVURLAsset(url: url)
             guard let sourceAudio = try? await asset.loadTracks(withMediaType: .audio).first else { continue }
-            let sourceRange = CMTimeRange(
+            let requested = CMTimeRange(
                 start: CMTime(seconds: clip.trimStart, preferredTimescale: Self.timescale),
                 end: CMTime(seconds: min(clip.trimEnd, clip.assetDuration), preferredTimescale: Self.timescale))
+            let trackRange = (try? await sourceAudio.load(.timeRange))
+                ?? CMTimeRange(start: .zero, duration: asset.duration)
+            let sourceRange = CMTimeRangeGetIntersection(requested, otherRange: trackRange)
+            guard sourceRange.duration.seconds > 0.04 else { continue }
             let at = CMTime(seconds: clip.offset, preferredTimescale: Self.timescale)
             do {
                 try audioTrack.insertTimeRange(sourceRange, of: sourceAudio, at: at)
@@ -248,8 +269,10 @@ struct CompositionEngine {
 
         var instructions: [CompositorInstruction] = []
         for i in 0..<max(0, times.count - 1) {
+            // Boundaries are distinct quantized ticks, so every interval has
+            // positive length; never skip one — a gap in the instruction
+            // tiling makes the player item fail outright.
             let t0 = times[i], t1 = times[i + 1]
-            guard t1 - t0 > epsilon / 2 else { continue }
             let mid = (t0 + t1) / 2
 
             var layers: [CompositorLayer] = []

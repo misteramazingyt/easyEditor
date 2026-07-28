@@ -178,6 +178,16 @@ struct EditorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            if editor.isImporting || editor.isRebuilding {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text(editor.isImporting ? "Importing…" : "Updating preview…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(14)
+                .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.black)

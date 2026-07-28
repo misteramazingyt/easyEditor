@@ -13,8 +13,12 @@ final class PlaybackController: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var hasContent = false
 
+    /// Called when the current item transitions to .failed (bad composition etc.).
+    var onItemFailed: ((String) -> Void)?
+
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+    private var statusObservation: NSKeyValueObservation?
     private var isScrubbing = false
     private var seekInFlight = false
     private var pendingSeek: Double?
@@ -57,6 +61,15 @@ final class PlaybackController: ObservableObject {
         item.videoComposition = built.videoComposition
         item.audioMix = built.audioMix
         item.audioTimePitchAlgorithm = .timeDomain
+        statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            guard item.status == .failed else { return }
+            let message = item.error?.localizedDescription ?? "unknown error"
+            Log.playback.error("Player item failed: \(message)")
+            Task { @MainActor in
+                self?.hasContent = false
+                self?.onItemFailed?(message)
+            }
+        }
         player.replaceCurrentItem(with: item)
         hasContent = true
         let clamped = min(resumeTime, max(0, built.duration - 0.05))

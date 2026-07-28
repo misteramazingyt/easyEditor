@@ -49,6 +49,9 @@ final class EditorState: ObservableObject {
         playback.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        playback.onItemFailed = { [weak self] message in
+            self?.errorMessage = "Playback failed: \(message)"
+        }
         rebuild()
     }
 
@@ -61,9 +64,19 @@ final class EditorState: ObservableObject {
         rebuildTask = Task { [weak self] in
             guard let self else { return }
             let overlays = await self.engine.renderOverlayImages(project: snapshot)
-            let built = try? await self.engine.build(project: snapshot, overlayImages: overlays)
-            guard !Task.isCancelled else { return }
-            self.playback.install(built)
+            do {
+                let built = try await self.engine.build(project: snapshot, overlayImages: overlays)
+                guard !Task.isCancelled else { return }
+                self.playback.install(built)
+            } catch CompositionEngine.EngineError.noVideoContent {
+                guard !Task.isCancelled else { return }
+                self.playback.install(nil)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.playback.install(nil)
+                Log.engine.error("Rebuild failed: \(error.localizedDescription)")
+                self.errorMessage = "Couldn't build the preview: \(error.localizedDescription)"
+            }
             self.isRebuilding = false
         }
     }
@@ -92,8 +105,10 @@ final class EditorState: ObservableObject {
         isImporting = true
         pushUndo()
         Task {
+            var succeeded = 0
             for item in items {
                 guard let imported = await importer.importPickerItem(item, projectID: project.id) else { continue }
+                succeeded += 1
                 switch imported {
                 case .video(let fileName, let duration):
                     project.append(.video(fileName: fileName, duration: duration,
@@ -105,6 +120,10 @@ final class EditorState: ObservableObject {
                 }
             }
             isImporting = false
+            if succeeded == 0 {
+                errorMessage = "Couldn't import the selected item\(items.count == 1 ? "" : "s"). "
+                    + "If it's an iCloud video, make sure it has finished downloading and try again."
+            }
         }
     }
 

@@ -30,32 +30,42 @@ enum ImportedMedia {
 /// Copies picked media into a project's Media directory and probes durations.
 struct MediaImportService {
 
-    /// Import one Photos picker item (video or image).
+    /// Import one Photos picker item (video or image). `supportedContentTypes`
+    /// is not always populated, so try both representations before giving up.
     func importPickerItem(_ item: PhotosPickerItem, projectID: UUID) async -> ImportedMedia? {
-        let isMovie = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
-        if isMovie {
-            guard let movie = try? await item.loadTransferable(type: MovieFile.self) else {
-                Log.importer.error("Movie load failed")
-                return nil
+        let types = item.supportedContentTypes
+        let looksLikeMovie = types.isEmpty
+            || types.contains { $0.conforms(to: .movie) || $0.conforms(to: .audiovisualContent) }
+        Log.importer.info("Importing picker item, types: \(types.map(\.identifier).joined(separator: ","))")
+
+        if looksLikeMovie {
+            do {
+                if let movie = try await item.loadTransferable(type: MovieFile.self) {
+                    return await importVideoFile(movie.url, projectID: projectID, deleteSource: true)
+                }
+            } catch {
+                Log.importer.error("Movie load failed: \(error.localizedDescription)")
             }
+        }
+        do {
+            if let data = try await item.loadTransferable(type: Data.self),
+               let image = UIImage(data: data) {
+                let fileName = UUID().uuidString + ".jpg"
+                let dest = FilePaths.mediaURL(projectID: projectID, fileName: fileName)
+                let scaled = image.scaledDown(maxDimension: 2160)
+                guard let jpeg = scaled.jpegData(compressionQuality: 0.9) else { return nil }
+                try jpeg.write(to: dest, options: .atomic)
+                return .image(fileName: fileName)
+            }
+        } catch {
+            Log.importer.error("Image load failed: \(error.localizedDescription)")
+        }
+        // Last resort: some items report image types but only deliver a movie.
+        if !looksLikeMovie, let movie = try? await item.loadTransferable(type: MovieFile.self) {
             return await importVideoFile(movie.url, projectID: projectID, deleteSource: true)
         }
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else {
-            Log.importer.error("Image load failed")
-            return nil
-        }
-        let fileName = UUID().uuidString + ".jpg"
-        let dest = FilePaths.mediaURL(projectID: projectID, fileName: fileName)
-        let scaled = image.scaledDown(maxDimension: 2160)
-        guard let jpeg = scaled.jpegData(compressionQuality: 0.9) else { return nil }
-        do {
-            try jpeg.write(to: dest, options: .atomic)
-            return .image(fileName: fileName)
-        } catch {
-            Log.importer.error("Image write failed: \(error.localizedDescription)")
-            return nil
-        }
+        Log.importer.error("No usable representation for picker item")
+        return nil
     }
 
     /// Copy a video file (already on disk) into the project and probe it.
