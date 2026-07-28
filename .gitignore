@@ -1,0 +1,31 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# XcodeGen output (regenerate with `xcodegen generate`)
+*.xcodeproj/
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# App runtime data / media (should never be committed)
+*.mov
+*.mp4
+
+# Build output
+dist/
+*.ipa
+Payload/
+
+# Legacy GreenDeck app this repo was adapted from (kept locally, not tracked)
+GreenDeck/
+
+# Local reference material
+IMG_*.PNG
+icon.png
