@@ -20,6 +20,22 @@ struct DesktopLibrarySheet: View {
     @State private var searchError: String?
     @FocusState private var searchFocused: Bool
 
+    // Search filters
+    private enum BackgroundFilter: String, CaseIterable {
+        case any = "Any", solid = "Solid", transparent = "Transparent"
+        var param: String? { self == .any ? nil : rawValue.lowercased() }
+    }
+    private static let colorOptions: [(name: String, hex: String)] = [
+        ("White", "#FFFFFF"), ("Black", "#000000"), ("Gray", "#808080"),
+        ("Red", "#E53935"), ("Orange", "#FB8C00"), ("Yellow", "#FDD835"),
+        ("Green", "#43A047"), ("Teal", "#00897B"), ("Blue", "#1E88E5"),
+        ("Purple", "#8E24AA"), ("Pink", "#EC407A"), ("Brown", "#795548"),
+    ]
+    @State private var filterFolder: String?
+    @State private var filterBackground: BackgroundFilter = .any
+    @State private var filterColor: (name: String, hex: String)?
+    @State private var rootFolders: [String] = []
+
     // Browse state
     @State private var pathStack: [String] = []   // absolute server paths; empty = root
     @State private var folders: [String] = []
@@ -130,6 +146,8 @@ struct DesktopLibrarySheet: View {
             .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
             .padding(.horizontal, 12)
 
+            filterChips
+
             if isSearching {
                 Spacer(); ProgressView("Searching…"); Spacer()
             } else if let searchError {
@@ -151,6 +169,78 @@ struct DesktopLibrarySheet: View {
         }
     }
 
+    /// Filter chips: folder subset, background type, dominant color.
+    private var filterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Menu {
+                    Button("All folders") { filterFolder = nil; rerunIfNeeded() }
+                    ForEach(rootFolders, id: \.self) { folder in
+                        Button(folder) { filterFolder = folder; rerunIfNeeded() }
+                    }
+                } label: {
+                    chipLabel(filterFolder ?? "All folders",
+                              systemImage: "folder",
+                              isActive: filterFolder != nil)
+                }
+
+                Menu {
+                    ForEach(BackgroundFilter.allCases, id: \.self) { option in
+                        Button(option.rawValue) { filterBackground = option; rerunIfNeeded() }
+                    }
+                } label: {
+                    chipLabel(filterBackground == .any ? "Background" : filterBackground.rawValue,
+                              systemImage: filterBackground == .transparent
+                                  ? "square.on.square.dashed" : "square.fill",
+                              isActive: filterBackground != .any)
+                }
+
+                Menu {
+                    Button("Any color") { filterColor = nil; rerunIfNeeded() }
+                    ForEach(Self.colorOptions, id: \.name) { option in
+                        Button {
+                            filterColor = option
+                            rerunIfNeeded()
+                        } label: {
+                            Label(option.name, systemImage: "circle.fill")
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(filterColor.map { Color.fromHex($0.hex) } ?? .clear)
+                            .frame(width: 12, height: 12)
+                            .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+                        Text(filterColor?.name ?? "Color").font(.caption)
+                        Image(systemName: "chevron.down").font(.system(size: 8))
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(filterColor != nil ? Color.blue.opacity(0.3) : .white.opacity(0.07),
+                                in: Capsule())
+                }
+                .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private func chipLabel(_ text: String, systemImage: String, isActive: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage).font(.system(size: 10))
+            Text(text).font(.caption).lineLimit(1)
+            Image(systemName: "chevron.down").font(.system(size: 8))
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(isActive ? Color.blue.opacity(0.3) : .white.opacity(0.07), in: Capsule())
+        .foregroundStyle(.white)
+    }
+
+    private func rerunIfNeeded() {
+        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+            runSearch()
+        }
+    }
+
     private func runSearch() {
         guard let service else { return }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -160,8 +250,13 @@ struct DesktopLibrarySheet: View {
         viewerIndex = nil
         Task {
             do {
-                searchResults = try await service.search(trimmed)
-                searchError = searchResults.isEmpty ? "No matches in your library." : nil
+                searchResults = try await service.search(
+                    trimmed,
+                    folder: filterFolder,
+                    background: filterBackground.param,
+                    colorHex: filterColor?.hex)
+                searchError = searchResults.isEmpty
+                    ? "No matches — try loosening the filters." : nil
             } catch {
                 searchResults = []
                 searchError = error.localizedDescription
@@ -262,6 +357,9 @@ struct DesktopLibrarySheet: View {
             let result = try await service.browse(path: path)
             folders = result.folders
             browseResults = service.browseImages(result)
+            if path == nil {
+                rootFolders = result.folders
+            }
             // Adopt the server's canonical absolute path for this level.
             if path != nil, !pathStack.isEmpty {
                 pathStack[pathStack.count - 1] = result.path

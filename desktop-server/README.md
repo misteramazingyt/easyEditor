@@ -43,7 +43,7 @@ that URL in the app instead.
 |---|---|---|
 | `/health` | — | status + index size |
 | `/browse` | `path` (optional) | subfolders + images of a folder |
-| `/search` | `q`, `k` | semantic results via semanticSearch's SearchService |
+| `/search` | `q`, `k`, `folder`, `bg` (`solid`/`transparent`), `color` (hex) | semantic results via semanticSearch's SearchService, filtered |
 | `/thumb` | `path` | cached 384px JPEG |
 | `/file` | `path` | original file (odd formats transcoded to JPEG) |
 

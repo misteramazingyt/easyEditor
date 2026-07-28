@@ -100,11 +100,24 @@ struct DesktopLibraryService {
         return try await get(BrowseResult.self, from: url("browse", items))
     }
 
-    func search(_ query: String, count: Int = 60) async throws -> [WebImage] {
-        let response = try await get(SearchResponse.self, from: url("search", [
+    func search(_ query: String, count: Int = 60,
+                folder: String? = nil,
+                background: String? = nil,
+                colorHex: String? = nil) async throws -> [WebImage] {
+        var items = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "k", value: String(count)),
-        ]))
+        ]
+        if let folder, !folder.isEmpty {
+            items.append(URLQueryItem(name: "folder", value: folder))
+        }
+        if let background, !background.isEmpty {
+            items.append(URLQueryItem(name: "bg", value: background))
+        }
+        if let colorHex, !colorHex.isEmpty {
+            items.append(URLQueryItem(name: "color", value: colorHex))
+        }
+        let response = try await get(SearchResponse.self, from: url("search", items))
         return response.results.map { entry in
             WebImage(id: entry.path,
                      thumbURL: thumbURL(forPath: entry.path),
