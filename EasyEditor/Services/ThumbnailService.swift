@@ -18,8 +18,8 @@ actor ThumbnailService {
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: height * 4 * UIScreen.main.scale,
-                                       height: height * UIScreen.main.scale)
+        generator.maximumSize = CGSize(width: height * 8,
+                                       height: height * 2)
         generator.requestedTimeToleranceBefore = CMTime(seconds: 0.25, preferredTimescale: 600)
         generator.requestedTimeToleranceAfter = CMTime(seconds: 0.25, preferredTimescale: 600)
 
@@ -44,7 +44,7 @@ actor ThumbnailService {
         let key = clipID.uuidString
         if let hit = singles[key] { return hit }
         guard let image = UIImage(contentsOfFile: url.path) else { return nil }
-        let thumb = image.scaledDown(maxDimension: height * 4 * UIScreen.main.scale)
+        let thumb = image.scaledDown(maxDimension: height * 8)
         if singles.count > 200 { singles.removeAll() }
         singles[key] = thumb
         return thumb

@@ -14,29 +14,57 @@ struct SFXLibrary {
         let sample: (_ t: Double, _ progress: Double) -> Double
     }
 
+    private static let twoPi: Double = 2.0 * Double.pi
+
+    private static func popSample(_ t: Double, _ p: Double) -> Double {
+        let freq: Double = 900.0 - 500.0 * p
+        return sin(twoPi * freq * t) * exp(-18.0 * p)
+    }
+
+    private static func whooshSample(_ t: Double, _ p: Double) -> Double {
+        // Filtered-noise feel: dense detuned sines swept downward.
+        let f: Double = 1400.0 - 1000.0 * p
+        let env: Double = sin(Double.pi * p)
+        let a: Double = sin(twoPi * f * t)
+        let b: Double = 0.5 * sin(twoPi * f * 1.31 * t)
+        let c: Double = 0.25 * sin(twoPi * f * 1.77 * t)
+        return (a + b + c) / 1.75 * env
+    }
+
+    private static func dingSample(_ t: Double, _ p: Double) -> Double {
+        let a: Double = sin(twoPi * 1320.0 * t)
+        let b: Double = 0.4 * sin(twoPi * 2640.0 * t)
+        return (a + b) / 1.4 * exp(-4.0 * p)
+    }
+
+    private static func clickSample(_ t: Double, _ p: Double) -> Double {
+        sin(twoPi * 2200.0 * t) * exp(-40.0 * p)
+    }
+
+    private static func riserSample(_ t: Double, _ p: Double) -> Double {
+        let freq: Double = 220.0 + 660.0 * p * p
+        let tail: Double = 1.0 - pow(max(0.0, p - 0.9) * 10.0, 2.0)
+        return sin(twoPi * freq * t) * p * tail
+    }
+
+    private static func thudSample(_ t: Double, _ p: Double) -> Double {
+        let freq: Double = 140.0 - 60.0 * p
+        return sin(twoPi * freq * t) * exp(-8.0 * p)
+    }
+
     static let effects: [Effect] = [
-        Effect(id: "pop", name: "Pop", systemImage: "bubble.left.fill", duration: 0.18) { t, p in
-            sin(2 * .pi * (900 - 500 * p) * t) * exp(-18 * p)
-        },
-        Effect(id: "whoosh", name: "Whoosh", systemImage: "wind", duration: 0.6) { t, p in
-            // Filtered-noise feel: dense detuned sines swept downward.
-            let f = 1400.0 - 1000.0 * p
-            let env = sin(.pi * p)
-            return (sin(2 * .pi * f * t) + 0.5 * sin(2 * .pi * f * 1.31 * t)
-                    + 0.25 * sin(2 * .pi * f * 1.77 * t)) / 1.75 * env
-        },
-        Effect(id: "ding", name: "Ding", systemImage: "bell.fill", duration: 1.0) { t, p in
-            (sin(2 * .pi * 1320 * t) + 0.4 * sin(2 * .pi * 2640 * t)) / 1.4 * exp(-4 * p)
-        },
-        Effect(id: "click", name: "Click", systemImage: "cursorarrow.click", duration: 0.06) { t, p in
-            sin(2 * .pi * 2200 * t) * exp(-40 * p)
-        },
-        Effect(id: "riser", name: "Riser", systemImage: "chart.line.uptrend.xyaxis", duration: 1.5) { t, p in
-            sin(2 * .pi * (220 + 660 * p * p) * t) * p * (1 - pow(max(0, p - 0.9) * 10, 2))
-        },
-        Effect(id: "thud", name: "Thud", systemImage: "hammer.fill", duration: 0.35) { t, p in
-            sin(2 * .pi * (140 - 60 * p) * t) * exp(-8 * p)
-        },
+        Effect(id: "pop", name: "Pop", systemImage: "bubble.left.fill",
+               duration: 0.18, sample: popSample),
+        Effect(id: "whoosh", name: "Whoosh", systemImage: "wind",
+               duration: 0.6, sample: whooshSample),
+        Effect(id: "ding", name: "Ding", systemImage: "bell.fill",
+               duration: 1.0, sample: dingSample),
+        Effect(id: "click", name: "Click", systemImage: "cursorarrow.click",
+               duration: 0.06, sample: clickSample),
+        Effect(id: "riser", name: "Riser", systemImage: "chart.line.uptrend.xyaxis",
+               duration: 1.5, sample: riserSample),
+        Effect(id: "thud", name: "Thud", systemImage: "hammer.fill",
+               duration: 0.35, sample: thudSample),
     ]
 
     /// Synthesize (once) and return the shared WAV URL for an effect.
