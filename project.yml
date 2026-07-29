@@ -33,6 +33,19 @@ targets:
         # (WireGuard-encrypted underneath); ATS must allow it.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # Receive GreenDeck project packages (.gdproj) via the share sheet.
+        # No LSSupportsOpeningDocumentsInPlace on purpose: the system copies
+        # into Documents/Inbox and we consume + delete.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: GreenDeck Project
+            LSHandlerRank: Owner
+            LSItemContentTypes: [com.greendeck.project]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.greendeck.project
+            UTTypeDescription: GreenDeck Project
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [gdproj]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.easyeditor.app

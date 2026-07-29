@@ -37,6 +37,14 @@ struct ProjectListView: View {
             .fullScreenCover(item: $openProject) { project in
                 EditorView(project: project)
             }
+            .alert("GreenDeck Import", isPresented: Binding(
+                get: { state.importAlert != nil },
+                set: { if !$0 { state.importAlert = nil } }
+            )) {
+                Button("OK") { state.importAlert = nil }
+            } message: {
+                Text(state.importAlert ?? "")
+            }
             .alert("Rename project", isPresented: Binding(
                 get: { renaming != nil },
                 set: { if !$0 { renaming = nil } }

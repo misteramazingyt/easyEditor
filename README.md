@@ -47,6 +47,7 @@ music    ▄▄▄▄▄        (green, FCP style)
 | Images | connected stills with placement controls |
 | Canvas | 9:16 / 16:9 / 1:1, letterboxed |
 | Export | H.264 MP4 via the same custom compositor as the preview, saved to Photos |
+| Import | receives GreenDeck `.gdproj` packages via the share sheet (Apple Archive; see HANDOFF-greendeck-project-import.md) |
 
 The preview and the export share one rendering path (a custom
 `AVVideoCompositing` implementation), so what you scrub is what you ship.
