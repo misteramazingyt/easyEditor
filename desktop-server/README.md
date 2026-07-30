@@ -12,11 +12,12 @@ directly — no code duplication, same DB/index):
 cd "d:\Inbox\00 Now\202607280921 - easyEditor\desktop-server"
 python server.py --library "E:/02 pictures" `
   --search-code "D:/Inbox/00 Now/202606041618 - pluginDev/semanticSearch" `
-  --quotes "D:/Inbox/00 Now/202607270424 - greatBooks/quotes" `
   --port 8787 --token pick-a-secret
 ```
 
-`--quotes` enables the quote browser (`/quote/*`). Natural-language quote
+The quote browser (`/quote/*`) is on by default, pointed at
+`D:/Inbox/00 Now/202607270424 - greatBooks/quotes` — override with
+`--quotes <path>` or disable with `--quotes ""`. Natural-language quote
 queries need `GEMINI_API_KEY` in the environment (same key nlq.py uses);
 without it the server falls back to keyword search.
 

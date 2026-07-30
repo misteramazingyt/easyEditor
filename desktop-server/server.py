@@ -574,9 +574,10 @@ def main() -> None:
                         help="Bind address (default all; Tailscale ACLs gate access)")
     parser.add_argument("--token", default="",
                         help="Optional shared secret; the app sends it with every request")
-    parser.add_argument("--quotes", default="",
-                        help='Path to the greatBooks quotes folder (enables /quote/*), '
-                             'e.g. "D:/Inbox/00 Now/202607270424 - greatBooks/quotes"')
+    parser.add_argument("--quotes",
+                        default="D:/Inbox/00 Now/202607270424 - greatBooks/quotes",
+                        help='Path to the greatBooks quotes folder (enables /quote/*). '
+                             'On by default; pass --quotes "" to disable.')
     args = parser.parse_args()
 
     library = Path(args.library).resolve()
