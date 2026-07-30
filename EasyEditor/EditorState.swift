@@ -210,7 +210,7 @@ final class EditorState: ObservableObject {
     }
 
     /// Download a web image and drop it on the timeline at the playhead.
-    func importWebImage(from url: URL) async -> Bool {
+    func importWebImage(from url: URL, placement: OverlayPlacement? = nil) async -> Bool {
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             guard let fileName = importer.saveImageData(data, projectID: project.id) else {
@@ -219,6 +219,7 @@ final class EditorState: ObservableObject {
             }
             pushUndo()
             var clip = TimelineClip.image(fileName: fileName, at: playback.currentTime)
+            if let placement { clip.placement = placement }
             clip.laneIndex = freeStackIndex(for: clip, desired: 1)
             project.append(clip)
             selectedClipID = clip.id

@@ -25,6 +25,7 @@ struct EditorView: View {
     @State private var showWebSearch = false
     @State private var showDesktopLibrary = false
     @State private var showAutoBRoll = false
+    @State private var showQuotes = false
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -146,6 +147,11 @@ struct EditorView: View {
             } label: {
                 Label("Desktop Library", systemImage: "desktopcomputer")
             }
+            Button {
+                showQuotes = true
+            } label: {
+                Label("Quote", systemImage: "quote.opening")
+            }
             Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: $showWebSearch) {
@@ -160,6 +166,11 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showAutoBRoll) {
             AutoBRollSheet().environmentObject(editor)
+        }
+        .sheet(isPresented: $showQuotes) {
+            QuoteSheet { url, placement in
+                await editor.importWebImage(from: url, placement: placement)
+            }
         }
         .fullScreenCover(isPresented: $showFullscreen) {
             ZStack(alignment: .topTrailing) {

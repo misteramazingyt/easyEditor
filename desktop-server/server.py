@@ -226,6 +226,28 @@ def solid_background_ids(image_ids: list[int]) -> set[int]:
     return keep
 
 
+# ── Quotes (greatBooks corpus via nlq.py) ────────────────────────────────
+
+def quote_row_json(r) -> dict:
+    """Serialize an nlq result row for the app."""
+    return {
+        "qid": r["qid"],
+        "author": r["author"],
+        "work": r["work"],
+        "text": " ".join((r["quote_wikiquote"] or "").split()),
+        "page": r["pdf_page"],
+        "grade": r["match_grade"],
+        "hasCrop": bool(r["located"]) and bool(r["page_crop"]),
+        "volume": r["volume"],
+    }
+
+
+def quote_sets_ok(params) -> bool:
+    """Only the Great Books set is live; other sets return no data yet."""
+    sets = params.get("sets", [""])[0]
+    return not sets or "greatbooks" in sets.lower()
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -278,6 +300,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.handle_thumb(params)
             elif route == "/file":
                 self.handle_file(params)
+            elif route.startswith("/quote/"):
+                self.handle_quote(route, params)
             else:
                 self.send_json({"error": "not found"}, status=404)
         except BrokenPipeError:
@@ -412,6 +436,128 @@ class Handler(BaseHTTPRequestHandler):
                 return
         self.serve_original(path)
 
+    # ── /quote/* ────────────────────────────────────────────────────────
+
+    def handle_quote(self, route: str, params):
+        nlq = STATE.get("nlq")
+        if nlq is None:
+            self.send_json({"error": "quotes not configured (--quotes)"}, status=503)
+            return
+        if not quote_sets_ok(params):
+            self.send_json({"authors": [], "works": [], "quotes": [], "results": []})
+            return
+        con = nlq.open_db()
+        try:
+            if route == "/quote/authors":
+                self.quote_authors(nlq, con, params)
+            elif route == "/quote/works":
+                self.quote_works(con, params)
+            elif route == "/quote/list":
+                self.quote_list(con, params)
+            elif route == "/quote/search":
+                self.quote_search(nlq, con, params)
+            elif route == "/quote/det":
+                self.quote_det(nlq, con, params)
+            elif route == "/quote/image":
+                self.quote_image(nlq, con, params)
+            else:
+                self.send_json({"error": "not found"}, status=404)
+        finally:
+            con.close()
+
+    def quote_authors(self, nlq, con, params):
+        from quote_dates import date_info
+        order = params.get("order", ["chrono"])[0]
+        rows = con.execute(
+            "SELECT author, count(*) FROM quotes GROUP BY author").fetchall()
+        authors = []
+        for name, count in rows:
+            year, label = date_info(name)
+            authors.append({"name": name, "count": count,
+                            "dates": label, "sortYear": year})
+        if order == "alpha":
+            authors.sort(key=lambda a: a["name"].lower())
+        else:
+            authors.sort(key=lambda a: (a["sortYear"], a["name"].lower()))
+        self.send_json({"authors": authors})
+
+    def quote_works(self, con, params):
+        author = params.get("author", [""])[0]
+        if author:
+            rows = con.execute(
+                "SELECT work, count(*) FROM quotes WHERE author = ? "
+                "GROUP BY work ORDER BY work COLLATE NOCASE", (author,)).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT work, count(*) FROM quotes "
+                "GROUP BY work ORDER BY work COLLATE NOCASE").fetchall()
+        self.send_json({"works": [{"name": w, "count": c} for w, c in rows]})
+
+    def quote_list(self, con, params):
+        author = params.get("author", [""])[0]
+        work = params.get("work", [""])[0]
+        # In-text order: located quotes by page then sequence; card-only last.
+        rows = con.execute(
+            "SELECT * FROM quotes WHERE author = ? AND work = ? "
+            "ORDER BY located DESC, pdf_page, qid LIMIT 400",
+            (author, work)).fetchall()
+        self.send_json({"quotes": [quote_row_json(r) for r in rows]})
+
+    def quote_search(self, nlq, con, params):
+        query = params.get("q", [""])[0].strip()
+        if not query:
+            self.send_json({"results": []})
+            return
+        allow_ai = STATE.get("quotes_ai", False)
+        with STATE["quote_lock"]:
+            try:
+                f, rows = nlq.answer(query, con=con, allow_ai=allow_ai, limit=30)
+            except SystemExit as e:   # missing GEMINI_API_KEY etc.
+                log.warning("quote NL failed (%s); keyword fallback", e)
+                f, rows = nlq.answer(query, con=con, allow_ai=False, limit=30)
+            except Exception as e:
+                log.warning("quote NL failed (%s); keyword fallback", e)
+                f, rows = nlq.answer(query, con=con, allow_ai=False, limit=30)
+        self.send_json({"results": [quote_row_json(r) for r in rows],
+                        "via": getattr(f, "via", "?")})
+
+    def quote_det(self, nlq, con, params):
+        f = nlq.Filters(via="app-deterministic")
+        if author := params.get("author", [""])[0]:
+            f.authors = [author]
+        if work := params.get("work", [""])[0]:
+            f.works = [work]
+        if topic := params.get("topic", [""])[0]:
+            f.fts_query = topic
+        f.limit = 50
+        if f.is_empty():
+            self.send_json({"results": []})
+            return
+        rows = nlq.search(con, f)
+        self.send_json({"results": [quote_row_json(r) for r in rows]})
+
+    def quote_image(self, nlq, con, params):
+        qid = params.get("qid", [""])[0]
+        kind = params.get("kind", ["card"])[0]
+        row = con.execute("SELECT * FROM quotes WHERE qid = ?", (qid,)).fetchone()
+        if row is None:
+            self.send_json({"error": "unknown qid"}, status=404)
+            return
+        rel = row["page_crop"] if kind == "crop" else row["card_png"]
+        if not rel:
+            self.send_json({"error": f"no {kind} for this quote"}, status=404)
+            return
+        path = (nlq.ROOT / rel).resolve()
+        try:
+            path.relative_to(nlq.ROOT)
+        except ValueError:
+            self.send_json({"error": "bad path"}, status=400)
+            return
+        if not path.is_file():
+            self.send_json({"error": "artifact missing"}, status=404)
+            return
+        self.send_bytes(path.read_bytes(), "image/png")
+
     def serve_original(self, path: Path):
         content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
         data = path.read_bytes()
@@ -428,6 +574,9 @@ def main() -> None:
                         help="Bind address (default all; Tailscale ACLs gate access)")
     parser.add_argument("--token", default="",
                         help="Optional shared secret; the app sends it with every request")
+    parser.add_argument("--quotes", default="",
+                        help='Path to the greatBooks quotes folder (enables /quote/*), '
+                             'e.g. "D:/Inbox/00 Now/202607270424 - greatBooks/quotes"')
     args = parser.parse_args()
 
     library = Path(args.library).resolve()
@@ -480,6 +629,29 @@ def main() -> None:
                         "run semanticSearch's index.py first", settings.faiss_index_path)
     except Exception as e:
         log.warning("semanticSearch import failed (%s) — /search disabled, browse still works", e)
+
+    # Quote corpus (optional).
+    if args.quotes:
+        quotes_root = Path(args.quotes).resolve()
+        query_dir = quotes_root / "query"
+        if (query_dir / "nlq.py").is_file():
+            sys.path.insert(0, str(query_dir))
+            sys.path.insert(0, str(Path(__file__).resolve().parent))  # quote_dates
+            try:
+                import nlq  # noqa: F401
+                STATE["nlq"] = nlq
+                STATE["quote_lock"] = threading.Lock()
+                STATE["quotes_ai"] = bool(os.environ.get("GEMINI_API_KEY"))
+                con = nlq.open_db()
+                count = con.execute("SELECT count(*) FROM quotes").fetchone()[0]
+                con.close()
+                log.info("Quotes ready: %d quotes (natural language %s)",
+                         count, "ON" if STATE["quotes_ai"] else
+                         "OFF — set GEMINI_API_KEY for NL queries")
+            except Exception as e:
+                log.warning("quotes import failed (%s) — /quote/* disabled", e)
+        else:
+            log.warning("No nlq.py under %s — /quote/* disabled", query_dir)
 
     STATE["roots"] = roots
     log.info("Serving library %s on %s:%d (token %s)",
