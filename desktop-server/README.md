@@ -15,6 +15,14 @@ python server.py --library "E:/02 pictures" `
   --port 8787 --token pick-a-secret
 ```
 
+**My Quotes** (`/myquotes/*`) is on by default too, pointed at
+`C:/Users/Shae/Documents/GitHub/misteramazing/_quotes` — override with
+`--my-quotes <path>`, disable with `--my-quotes ""`. Card *styles* are
+discovered from disk: `cards/<qid>.jpg` is style `default`, and either
+`cards/<style>/<qid>.jpg` or `cards/<qid>__<style>.jpg` adds named styles.
+Shoot the other designs from `tools/card_template.py` into one of those
+layouts and the app starts shuffling between them with no server change.
+
 The quote browser (`/quote/*`) is on by default, pointed at
 `D:/Inbox/00 Now/202607270424 - greatBooks/quotes` — override with
 `--quotes <path>` or disable with `--quotes ""`. Natural-language quote
@@ -50,6 +58,7 @@ that URL in the app instead.
 | `/health` | — | status + index size |
 | `/browse` | `path` (optional) | subfolders + images of a folder |
 | `/search` | `q`, `k`, `folder`, `bg` (`solid`/`transparent`), `color` (hex) | semantic results via semanticSearch's SearchService, filtered |
+| `/myquotes/sections` `/myquotes/search` `/myquotes/image` | `q`, `section`, `qid`, `style` | the misteramazing `_quotes` cards, style randomized per search |
 | `/thumb` | `path` | cached 384px JPEG |
 | `/file` | `path` | original file (odd formats transcoded to JPEG) |
 

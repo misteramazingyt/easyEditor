@@ -26,6 +26,7 @@ struct EditorView: View {
     @State private var showDesktopLibrary = false
     @State private var showAutoBRoll = false
     @State private var showQuotes = false
+    @State private var showMyQuotes = false
     @State private var blinkOn = true
 
     init(project: VideoProject) {
@@ -157,6 +158,11 @@ struct EditorView: View {
             } label: {
                 Label("Quote", systemImage: "quote.opening")
             }
+            Button {
+                showMyQuotes = true
+            } label: {
+                Label("My Quotes", systemImage: "quote.bubble")
+            }
             Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: $showWebSearch) {
@@ -174,6 +180,11 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showQuotes) {
             QuoteSheet { url, placement in
+                await editor.importWebImage(from: url, placement: placement)
+            }
+        }
+        .sheet(isPresented: $showMyQuotes) {
+            MyQuotesSheet { url, placement in
                 await editor.importWebImage(from: url, placement: placement)
             }
         }

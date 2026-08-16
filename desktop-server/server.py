@@ -25,6 +25,7 @@ import json
 import logging
 import mimetypes
 import os
+import random
 import sys
 import tempfile
 import threading
@@ -302,6 +303,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.handle_file(params)
             elif route.startswith("/quote/"):
                 self.handle_quote(route, params)
+            elif route.startswith("/myquotes/"):
+                self.handle_my_quotes(route, params)
             else:
                 self.send_json({"error": "not found"}, status=404)
         except BrokenPipeError:
@@ -558,6 +561,35 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_bytes(path.read_bytes(), "image/png")
 
+    # ── /myquotes/* ─────────────────────────────────────────────────────
+
+    def handle_my_quotes(self, route: str, params):
+        corpus = STATE.get("myquotes")
+        if corpus is None:
+            self.send_json({"error": "my quotes not configured (--my-quotes)"},
+                           status=503)
+            return
+        if route == "/myquotes/sections":
+            self.send_json({"sections": corpus.sections()})
+        elif route == "/myquotes/search":
+            rows = corpus.search(params.get("q", [""])[0],
+                                 section=params.get("section", [""])[0],
+                                 limit=int(params.get("k", ["60"])[0]))
+            # A fresh RNG per request: the same search shuffles differently
+            # every time, which is the point.
+            corpus.randomize_styles(rows, random.Random())
+            self.send_json({"results": rows})
+        elif route == "/myquotes/image":
+            path = corpus.card_path(params.get("qid", [""])[0],
+                                    params.get("style", [""])[0])
+            if path is None or not path.is_file():
+                self.send_json({"error": "no card for that quote"}, status=404)
+                return
+            content_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+            self.send_bytes(path.read_bytes(), content_type)
+        else:
+            self.send_json({"error": "not found"}, status=404)
+
     def serve_original(self, path: Path):
         content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
         data = path.read_bytes()
@@ -574,6 +606,10 @@ def main() -> None:
                         help="Bind address (default all; Tailscale ACLs gate access)")
     parser.add_argument("--token", default="",
                         help="Optional shared secret; the app sends it with every request")
+    parser.add_argument("--my-quotes",
+                        default="C:/Users/Shae/Documents/GitHub/misteramazing/_quotes",
+                        help='Path to the misteramazing _quotes folder (enables '
+                             '/myquotes/*). On by default; pass --my-quotes "" to disable.')
     parser.add_argument("--quotes",
                         default="D:/Inbox/00 Now/202607270424 - greatBooks/quotes",
                         help='Path to the greatBooks quotes folder (enables /quote/*). '
@@ -653,6 +689,19 @@ def main() -> None:
                 log.warning("quotes import failed (%s) — /quote/* disabled", e)
         else:
             log.warning("No nlq.py under %s — /quote/* disabled", query_dir)
+
+    # My quotes (misteramazing card collection).
+    if args.my_quotes:
+        my_root = Path(args.my_quotes).resolve()
+        if (my_root / "data" / "metadata.json").is_file():
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            try:
+                from myquotes import MyQuotes
+                STATE["myquotes"] = MyQuotes(my_root)
+            except Exception as e:
+                log.warning("my-quotes load failed (%s) — /myquotes/* disabled", e)
+        else:
+            log.warning("No data/metadata.json under %s — /myquotes/* disabled", my_root)
 
     STATE["roots"] = roots
     log.info("Serving library %s on %s:%d (token %s)",
