@@ -209,7 +209,7 @@ final class LiveRecordingService: NSObject, ObservableObject,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
         ]
-        let canAlpha = AVAssetWriter.canApply(outputSettings: alphaSettings, forMediaType: .video)
+        let canAlpha = newWriter.canApply(outputSettings: alphaSettings, forMediaType: .video)
         usedAlphaCodec = canAlpha
         if !canAlpha {
             Log.recording.info("HEVC-with-alpha unavailable — recording opaque + render-time cutout")
