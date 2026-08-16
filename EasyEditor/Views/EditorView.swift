@@ -71,6 +71,10 @@ struct EditorView: View {
             saveBox.save = { appState.save($0) }
             Haptics.prepare()
         }
+        .onDisappear {
+            // Covers every way out of the editor, not just the close buttons.
+            editor.teardown()
+        }
         .onChange(of: pickedMedia) { _, items in
             guard !items.isEmpty else { return }
             editor.importPickedMedia(items)
@@ -204,8 +208,7 @@ struct EditorView: View {
     private var topBar: some View {
         HStack(spacing: 18) {
             Button {
-                editor.playback.pause()
-                appState.save(editor.project)
+                editor.teardown()
                 dismiss()
             } label: {
                 Image(systemName: "xmark").font(.title3.weight(.semibold))
@@ -233,8 +236,7 @@ struct EditorView: View {
             Spacer()
 
             Button {
-                editor.playback.pause()
-                appState.save(editor.project)
+                editor.teardown()
                 dismiss()
             } label: {
                 Image(systemName: "book").font(.title3)

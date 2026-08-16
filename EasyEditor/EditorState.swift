@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import SwiftUI
 import PhotosUI
 import Combine
@@ -10,7 +11,10 @@ import CoreImage
 final class EditorState: ObservableObject {
 
     @Published var project: VideoProject {
-        didSet { projectChanged.send() }
+        didSet {
+            isDirty = true
+            projectChanged.send()
+        }
     }
     @Published var selectedClipID: UUID?
     @Published var pixelsPerSecond: CGFloat = 60
@@ -39,6 +43,8 @@ final class EditorState: ObservableObject {
     private var suppressPipeline = false
     private var liveClipID: UUID?
     private var liveTimer: Timer?
+    private var isDirty = false
+    private var autosaveTask: Task<Void, Never>?
     private let projectChanged = PassthroughSubject<Void, Never>()
     private var cancellables: Set<AnyCancellable> = []
     private var rebuildTask: Task<Void, Never>?
@@ -53,8 +59,9 @@ final class EditorState: ObservableObject {
         projectChanged
             .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
             .sink { [weak self] in
-                guard let self, !self.suppressPipeline else { return }
-                self.save(self.project)
+                guard let self else { return }
+                self.flushSave()
+                guard !self.suppressPipeline else { return }
                 self.rebuild()
             }
             .store(in: &cancellables)
@@ -69,7 +76,61 @@ final class EditorState: ObservableObject {
         recorder.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+
+        // Autosave: leaving the app (or being killed from the switcher) must
+        // not cost edits that are still inside the debounce window.
+        NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
+            .merge(with: NotificationCenter.default.publisher(
+                for: UIApplication.didEnterBackgroundNotification))
+            .sink { [weak self] _ in self?.flushSave(force: true) }
+            .store(in: &cancellables)
+        startAutosave()
+
         rebuild()
+    }
+
+    // MARK: - Autosave
+
+    private func startAutosave() {
+        autosaveTask?.cancel()
+        autosaveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                guard !Task.isCancelled else { return }
+                await MainActor.run { self?.flushSave() }
+            }
+        }
+    }
+
+    func stopAutosave() {
+        autosaveTask?.cancel()
+        autosaveTask = nil
+    }
+
+    /// Persist the project if anything changed. A take still being written is
+    /// stripped first — its file doesn't exist yet, so it must never be saved.
+    func flushSave(force: Bool = false) {
+        guard isDirty || force else { return }
+        var snapshot = project
+        snapshot.clips.removeAll { $0.isLiveRecording == true }
+        save(snapshot)
+        isDirty = false
+    }
+
+    /// Called when the editor closes: save, stop autosaving, and release the
+    /// camera/player.
+    func teardown() {
+        switch recorder.state {
+        case .recording, .paused:
+            stopRecording()   // finalizes the take, then saves through the pipeline
+        case .armed:
+            recorder.disarm()
+        case .idle:
+            break
+        }
+        playback.pause()
+        flushSave(force: true)
+        stopAutosave()
     }
 
     // MARK: - Composition pipeline
