@@ -72,6 +72,11 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     /// Background removal (person segmentation / subject lift / color key).
     var cutout: CutoutMode?
 
+    /// True while this clip's file is still being written by the live
+    /// recorder: the timeline draws a growing red chip and the render engine
+    /// skips it until the writer finishes.
+    var isLiveRecording: Bool?
+
     /// Transition into the *next* primary clip (primary storyline only).
     var transitionToNext: Transition?
 

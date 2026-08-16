@@ -26,6 +26,7 @@ final class EditorState: ObservableObject {
     @Published private(set) var autoBRollStatus: String?
 
     let playback = PlaybackController()
+    let recorder = LiveRecordingService()
 
     private let engine = CompositionEngine()
     private let importer = MediaImportService()
@@ -33,6 +34,11 @@ final class EditorState: ObservableObject {
     private var undoStack: [VideoProject] = []
     private var redoStack: [VideoProject] = []
     private var toastTask: Task<Void, Never>?
+    /// Set while a live recording is in flight: the project mutates ~10×/s and
+    /// references a file that doesn't exist yet, so saving and rebuilding wait.
+    private var suppressPipeline = false
+    private var liveClipID: UUID?
+    private var liveTimer: Timer?
     private let projectChanged = PassthroughSubject<Void, Never>()
     private var cancellables: Set<AnyCancellable> = []
     private var rebuildTask: Task<Void, Never>?
@@ -47,7 +53,7 @@ final class EditorState: ObservableObject {
         projectChanged
             .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
             .sink { [weak self] in
-                guard let self else { return }
+                guard let self, !self.suppressPipeline else { return }
                 self.save(self.project)
                 self.rebuild()
             }
@@ -60,6 +66,9 @@ final class EditorState: ObservableObject {
         playback.onItemFailed = { [weak self] message in
             self?.errorMessage = "Playback failed: \(message)"
         }
+        recorder.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
         rebuild()
     }
 
@@ -447,6 +456,120 @@ final class EditorState: ObservableObject {
             clip.offset = max(0, timelineTime)
             project.update(clip)
             project.renumberPrimary()
+        }
+    }
+
+    // MARK: - Live keyed recording
+
+    var recordingState: LiveRecordingService.State { recorder.state }
+    var recordingElapsed: Double { recorder.elapsed }
+
+    /// The record button's whole state machine:
+    /// idle → armed (camera up, keyed overlay) → recording → paused ⇄ recording.
+    func recordButtonTapped() {
+        switch recorder.state {
+        case .idle:
+            playback.pause()
+            Task {
+                let size = project.aspect.renderSize
+                if await recorder.arm(renderSize: size) {
+                    Haptics.selection()
+                }
+                if let message = recorder.errorMessage {
+                    errorMessage = message
+                    recorder.errorMessage = nil
+                }
+            }
+        case .armed:
+            beginLiveRecording()
+        case .recording:
+            recorder.pause()
+            playback.pause()
+            Haptics.snap()
+        case .paused:
+            recorder.resume()
+            if playback.hasContent && !playback.isPlaying { playback.playPause() }
+            Haptics.snap()
+        }
+    }
+
+    /// The "×" in the preview: leave camera mode without recording anything.
+    func cancelArmedRecording() {
+        guard recorder.state == .armed else { return }
+        recorder.disarm()
+        Haptics.selection()
+    }
+
+    private func beginLiveRecording() {
+        let fileName = "recording-\(UUID().uuidString).mov"
+        let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+        guard recorder.startRecording(to: url) else {
+            if let message = recorder.errorMessage {
+                errorMessage = message
+                recorder.errorMessage = nil
+            }
+            return
+        }
+        pushUndo()
+        suppressPipeline = true
+
+        // A placeholder clip on a fresh layer above everything, growing live.
+        var clip = TimelineClip(kind: .video, lane: .broll, fileName: fileName,
+                                assetDuration: 0, trimStart: 0, trimEnd: 0.1,
+                                offset: playback.currentTime)
+        clip.isLiveRecording = true
+        clip.laneIndex = max(1, project.maxStackAbove + 1)
+        project.append(clip)
+        liveClipID = clip.id
+        selectedClipID = nil
+
+        liveTimer?.invalidate()
+        liveTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.growLiveClip() }
+        }
+        if playback.hasContent && !playback.isPlaying { playback.playPause() }
+        Haptics.drop()
+    }
+
+    private func growLiveClip() {
+        guard let id = liveClipID, var clip = project.clip(id) else { return }
+        clip.trimEnd = max(0.1, recorder.elapsed)
+        clip.assetDuration = clip.trimEnd
+        project.update(clip)
+    }
+
+    /// The red square: finalize the recording onto its layer.
+    func stopRecording() {
+        guard recorder.state == .recording || recorder.state == .paused else { return }
+        liveTimer?.invalidate()
+        liveTimer = nil
+        playback.pause()
+        Task {
+            let duration = await recorder.finish()
+            let usedAlpha = recorder.usedAlphaCodec
+            recorder.disarm()
+            suppressPipeline = false
+
+            if let duration, duration > 0.15, let id = liveClipID,
+               var clip = project.clip(id) {
+                clip.assetDuration = duration
+                clip.trimStart = 0
+                clip.trimEnd = duration
+                clip.isLiveRecording = nil
+                // Opaque fallback: key it at render time instead.
+                if !usedAlpha { clip.cutout = .person }
+                project.update(clip)
+                selectedClipID = id
+                showToast("Recorded \(TimeFormat.clock(duration))")
+                Haptics.success()
+            } else {
+                if let id = liveClipID { project.remove(id) }
+                errorMessage = recorder.errorMessage ?? "Nothing was recorded."
+                recorder.errorMessage = nil
+                Haptics.warning()
+            }
+            liveClipID = nil
+            rebuild()
         }
     }
 

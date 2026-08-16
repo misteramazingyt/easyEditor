@@ -41,9 +41,12 @@ struct ClipChipView: View {
 
     private var background: some View {
         Group {
-            switch clip.kind {
-            case .video:
-                Color(red: 0.16, green: 0.2, blue: 0.28)
+            if clip.isLiveRecording == true {
+                Color(red: 0.45, green: 0.09, blue: 0.12)
+            } else {
+                switch clip.kind {
+                case .video:
+                    Color(red: 0.16, green: 0.2, blue: 0.28)
             case .image:
                 Color(red: 0.2, green: 0.24, blue: 0.3)
             case .title:
@@ -52,36 +55,60 @@ struct ClipChipView: View {
                 Color(red: 0.12, green: 0.45, blue: 0.25) // FCP music green
             case .voiceover:
                 Color(red: 0.13, green: 0.4, blue: 0.5)
-            case .sfx:
-                Color(red: 0.35, green: 0.3, blue: 0.5)
+                case .sfx:
+                    Color(red: 0.35, green: 0.3, blue: 0.5)
+                }
             }
         }
     }
 
     @ViewBuilder
     private var content: some View {
-        switch clip.kind {
-        case .video:
-            filmstripView
-        case .image:
-            if let imageThumb {
-                Image(uiImage: imageThumb)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: max(10, width), height: height)
-            } else {
-                Image(systemName: "photo").font(.caption2).foregroundStyle(.white.opacity(0.7))
-                    .task { await loadImageThumb() }
+        if clip.isLiveRecording == true {
+            // The file is still being written — draw the take growing instead
+            // of asking AVFoundation for thumbnails of an unfinished movie.
+            recordingBars
+        } else {
+            switch clip.kind {
+            case .video:
+                filmstripView
+            case .image:
+                if let imageThumb {
+                    Image(uiImage: imageThumb)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: max(10, width), height: height)
+                } else {
+                    Image(systemName: "photo").font(.caption2).foregroundStyle(.white.opacity(0.7))
+                        .task { await loadImageThumb() }
+                }
+            case .title:
+                Text(clip.text?.string ?? "Title")
+                    .font(.system(size: max(7, min(11, height * 0.8))).weight(.semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            case .music, .voiceover, .sfx:
+                waveform
             }
-        case .title:
-            Text(clip.text?.string ?? "Title")
-                .font(.system(size: max(7, min(11, height * 0.8))).weight(.semibold))
-                .lineLimit(1)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .music, .voiceover, .sfx:
-            waveform
+        }
+    }
+
+    /// Growing take: one bar per ~6pt of recorded time, brightest at the head.
+    private var recordingBars: some View {
+        Canvas { context, size in
+            let barWidth: CGFloat = 2.5
+            let gap: CGFloat = 3.5
+            var x: CGFloat = 3
+            while x < size.width - 2 {
+                let headroom = min(1, (size.width - x) / 40)
+                let h = size.height * (0.35 + 0.5 * (1 - headroom))
+                let rect = CGRect(x: x, y: (size.height - h) / 2, width: barWidth, height: h)
+                context.fill(Path(roundedRect: rect, cornerRadius: 1),
+                             with: .color(.white.opacity(0.85)))
+                x += barWidth + gap
+            }
         }
     }
 

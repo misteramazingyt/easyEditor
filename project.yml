@@ -24,7 +24,8 @@ targets:
       properties:
         UILaunchScreen: {}
         UIAppFonts: [TikTokSans.ttf]
-        NSMicrophoneUsageDescription: "EasyEditor needs microphone access to record voiceovers."
+        NSCameraUsageDescription: "EasyEditor uses the camera to record you over your timeline with the background removed."
+        NSMicrophoneUsageDescription: "EasyEditor needs microphone access to record voiceovers and camera takes."
         NSPhotoLibraryAddUsageDescription: "EasyEditor needs permission to save exported videos to your Photos library."
         NSSpeechRecognitionUsageDescription: "EasyEditor uses speech recognition to generate automatic captions from your clips."
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]

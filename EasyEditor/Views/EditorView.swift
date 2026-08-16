@@ -26,6 +26,7 @@ struct EditorView: View {
     @State private var showDesktopLibrary = false
     @State private var showAutoBRoll = false
     @State private var showQuotes = false
+    @State private var blinkOn = true
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -267,6 +268,12 @@ struct EditorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // Keyed camera, composited over whatever the layers are showing.
+            if editor.recordingState != .idle {
+                CameraCutoutPreview(frames: editor.recorder.frames)
+                    .aspectRatio(canvasAspect, contentMode: .fit)
+                    .allowsHitTesting(false)
+            }
             if editor.isImporting || editor.isRebuilding || editor.isGeneratingCaptions || editor.isProcessing {
                 VStack(spacing: 8) {
                     ProgressView()
@@ -294,6 +301,83 @@ struct EditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.black)
+        .overlay(alignment: .topLeading) { armedCancelButton }
+        .overlay(alignment: .topTrailing) { recordingHUD }
+    }
+
+    private var canvasAspect: CGFloat {
+        let size = editor.project.aspect.renderSize
+        return size.width / size.height
+    }
+
+    /// Leave camera mode without recording (spec: mis-tapped the white circle).
+    @ViewBuilder
+    private var armedCancelButton: some View {
+        if editor.recordingState == .armed {
+            Button {
+                editor.cancelArmedRecording()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(.black.opacity(0.45), in: Circle())
+                    .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+            }
+            .padding(12)
+        }
+    }
+
+    @ViewBuilder
+    private var recordingHUD: some View {
+        if editor.recordingState == .recording || editor.recordingState == .paused {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 9, height: 9)
+                    .opacity(editor.recordingState == .recording ? (blinkOn ? 1 : 0.15) : 1)
+                Text(TimeFormat.clock(editor.recordingElapsed))
+                    .font(.footnote.monospacedDigit().weight(.semibold))
+                if editor.recordingState == .paused {
+                    Text("PAUSED")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.orange)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(12)
+        }
+    }
+
+    /// White circle → red circle (armed) → blinking red (recording) → pause bars.
+    private var recordButton: some View {
+        Button {
+            editor.recordButtonTapped()
+        } label: {
+            ZStack {
+                Circle()
+                    .strokeBorder(.white.opacity(0.85), lineWidth: 2.5)
+                    .frame(width: 34, height: 34)
+                switch editor.recordingState {
+                case .idle:
+                    Circle().fill(.white).frame(width: 23, height: 23)
+                case .armed:
+                    Circle().fill(.red).frame(width: 23, height: 23)
+                case .recording:
+                    Circle().fill(.red).frame(width: 23, height: 23)
+                        .opacity(blinkOn ? 1 : 0.2)
+                case .paused:
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 1.5).frame(width: 5, height: 17)
+                        RoundedRectangle(cornerRadius: 1.5).frame(width: 5, height: 17)
+                    }
+                    .foregroundStyle(.red)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Transport
@@ -327,12 +411,26 @@ struct EditorView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
-                editor.togglePlayback()
-            } label: {
-                Image(systemName: editor.playback.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title)
+            HStack(spacing: 20) {
+                Button {
+                    editor.togglePlayback()
+                } label: {
+                    Image(systemName: editor.playback.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title)
+                }
+                recordButton
+                if editor.recordingState == .recording || editor.recordingState == .paused {
+                    Button {
+                        editor.stopRecording()
+                    } label: {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(.red)
+                            .frame(width: 21, height: 21)
+                    }
+                    .transition(.scale.combined(with: .opacity))
+                }
             }
+            .animation(.snappy(duration: 0.2), value: editor.recordingState)
 
             Button {
                 showFullscreen = true
@@ -345,6 +443,9 @@ struct EditorView: View {
         .padding(.horizontal, 22)
         .padding(.vertical, 8)
         .background(Color(red: 0.03, green: 0.04, blue: 0.06))
+        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
+            if editor.recordingState == .recording { blinkOn.toggle() } else { blinkOn = true }
+        }
     }
 }
 

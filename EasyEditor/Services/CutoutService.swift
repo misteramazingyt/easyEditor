@@ -18,25 +18,39 @@ enum CutoutService {
     }()
     private static let personLock = NSLock()
 
-    /// Mask the person in `image` (which came from `buffer`); everything else
-    /// becomes transparent. Returns the input unchanged on failure.
-    static func personMasked(_ image: CIImage, buffer: CVPixelBuffer) -> CIImage {
+    /// Person-segmentation mask for `buffer`, scaled to `extent` (the extent
+    /// of the image it will be blended with). nil when Vision finds nothing.
+    static func personMask(buffer: CVPixelBuffer, scaledTo extent: CGRect) -> CIImage? {
         personLock.lock()
         defer { personLock.unlock() }
         let handler = VNImageRequestHandler(cvPixelBuffer: buffer, options: [:])
         do {
             try handler.perform([personRequest])
         } catch {
-            return image
+            return nil
         }
         guard let maskBuffer = personRequest.results?.first?.pixelBuffer else {
+            return nil
+        }
+        let mask = CIImage(cvPixelBuffer: maskBuffer)
+        guard mask.extent.width > 0, mask.extent.height > 0 else { return nil }
+        return mask.transformed(by: CGAffineTransform(
+            scaleX: extent.width / mask.extent.width,
+            y: extent.height / mask.extent.height))
+    }
+
+    /// Mask the person in `image` (which came from `buffer`); everything else
+    /// becomes transparent. Returns the input unchanged on failure.
+    static func personMasked(_ image: CIImage, buffer: CVPixelBuffer) -> CIImage {
+        guard let mask = personMask(buffer: buffer, scaledTo: image.extent) else {
             return image
         }
-        var mask = CIImage(cvPixelBuffer: maskBuffer)
-        let scaleX = image.extent.width / mask.extent.width
-        let scaleY = image.extent.height / mask.extent.height
-        mask = mask.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
         return blend(image, mask: mask)
+    }
+
+    /// Blend an already-computed mask (same coordinate space as `image`).
+    static func masked(_ image: CIImage, with mask: CIImage) -> CIImage {
+        blend(image, mask: mask)
     }
 
     // MARK: - Subject lifting (stills, iOS 17+)

@@ -33,8 +33,11 @@ struct CompositionEngine {
 
     /// Build the playable/exportable graph. `overlayImages` maps image/title
     /// clip IDs to pre-rendered CIImages (see `renderOverlayImages`).
-    func build(project: VideoProject,
+    func build(project rawProject: VideoProject,
                overlayImages: [UUID: CIImage]) async throws -> BuiltComposition {
+        // A clip still being recorded has no finished file yet.
+        var project = rawProject
+        project.clips.removeAll { $0.isLiveRecording == true }
         let composition = AVMutableComposition()
         let ordered = project.primaryClips.filter { $0.fileName != nil }
         guard !ordered.isEmpty else { throw EngineError.noVideoContent }
