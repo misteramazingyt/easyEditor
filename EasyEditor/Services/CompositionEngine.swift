@@ -191,7 +191,16 @@ struct CompositionEngine {
                 try audioTrack.insertTimeRange(sourceRange, of: sourceAudio, at: at)
             } catch { continue }
             let params = AVMutableAudioMixInputParameters(track: audioTrack)
-            params.setVolume(clip.isMuted ? 0 : Float(clip.volume), at: .zero)
+            let volume = clip.isMuted ? 0 : Float(clip.volume)
+            if let fadeIn = clip.fadeIn, fadeIn > 0.01, volume > 0 {
+                let ramp = CMTimeRange(start: at,
+                                       duration: CMTime(seconds: min(fadeIn, clip.effectiveDuration),
+                                                        preferredTimescale: Self.timescale))
+                params.setVolumeRamp(fromStartVolume: 0, toEndVolume: volume, timeRange: ramp)
+                params.setVolume(volume, at: CMTimeAdd(at, ramp.duration))
+            } else {
+                params.setVolume(volume, at: .zero)
+            }
             mixParams.append(params)
         }
 
@@ -314,8 +323,9 @@ struct CompositionEngine {
             }
         }
         for clip in overlayClips {
-            boundaries.insert(quantize(clip.offset))
-            boundaries.insert(quantize(clip.offset + clip.effectiveDuration))
+            let start = project.start(of: clip)
+            boundaries.insert(quantize(start))
+            boundaries.insert(quantize(start + clip.effectiveDuration))
         }
         let windows = focusWindows(project: project)
         for window in windows {
@@ -392,7 +402,10 @@ struct CompositionEngine {
             // Still overlays (images/titles), lowest stacking slot first.
             var overlays: [CompositorOverlay] = []
             for clip in overlayClips.sorted(by: { $0.stackIndex < $1.stackIndex }) {
-                let start = clip.offset, end = clip.offset + clip.effectiveDuration
+                // start(of:) so a still parked on the storyline lands at its
+                // magnetic time rather than at zero.
+                let start = project.start(of: clip)
+                let end = start + clip.effectiveDuration
                 if start - epsilon <= mid && mid < end - epsilon,
                    let image = overlayImages[clip.id] {
                     overlays.append(CompositorOverlay(image: image,
@@ -401,7 +414,8 @@ struct CompositionEngine {
                                                       clipEnd: end,
                                                       inOut: clip.inOut,
                                                       loop: clip.loopFx,
-                                                      compositing: clip.compositing))
+                                                      compositing: clip.compositing,
+                                                      blend: clip.blend))
                 }
             }
 
@@ -435,7 +449,8 @@ struct CompositionEngine {
                                     isFlippedH: clip.isFlippedH,
                                     effect: clip.effect,
                                     mask: clip.mask,
-                                    cutout: clip.cutout)
+                                    cutout: clip.cutout,
+                                    blend: clip.blend)
         layer.startOpacity = clip.effectiveOpacity
         layer.endOpacity = clip.effectiveOpacity
         guard role != .solo, regionEnd > regionStart else { return layer }

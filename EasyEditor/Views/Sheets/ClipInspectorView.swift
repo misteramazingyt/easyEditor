@@ -53,6 +53,13 @@ struct ClipInspectorView: View {
                     }
                 }
                 .listRowBackground(Color.clear)
+                if clip.groupID != nil {
+                    Button {
+                        editor.ungroupClip(clip.id)
+                    } label: {
+                        Label("Ungroup", systemImage: "rectangle.split.3x1")
+                    }
+                }
             }
 
             if clip.canAdjustSpeed {

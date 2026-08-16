@@ -88,6 +88,13 @@ struct VideoProject: Identifiable, Codable, Equatable {
         clips.first { $0.id == id }
     }
 
+    /// Every clip linked to `id`, including `id` itself.
+    func linkedClips(with id: UUID) -> [TimelineClip] {
+        guard let clip = clip(id) else { return [] }
+        guard let group = clip.groupID else { return [clip] }
+        return clips.filter { $0.groupID == group }
+    }
+
     mutating func update(_ clip: TimelineClip) {
         if let i = clips.firstIndex(where: { $0.id == clip.id }) {
             clips[i] = clip

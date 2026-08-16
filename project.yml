@@ -19,6 +19,9 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: EasyEditor
+      # Outro media, copied flat into the bundle so Bundle.main.url finds them.
+      - path: outro-assets
+        buildPhase: resources
     info:
       path: EasyEditor/Info.plist
       properties:

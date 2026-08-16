@@ -64,7 +64,8 @@ struct EditorView: View {
                     onVoice: { showVoiceSheet = true },
                     onText: { textSheetIsTitle = false; showTextSheet = true },
                     onCaptions: { editor.generateCaptions() },
-                    onAutoBRoll: { showAutoBRoll = true })
+                    onAutoBRoll: { showAutoBRoll = true },
+                    onOutro: { editor.appendOutro() })
             }
         }
         .background(Color(red: 0.05, green: 0.06, blue: 0.09).ignoresSafeArea())

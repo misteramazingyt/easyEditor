@@ -284,6 +284,26 @@ struct OverlayPlacement: Codable, Equatable {
     static let image = OverlayPlacement(centerX: 0.5, centerY: 0.5, widthFraction: 0.6)
 }
 
+// MARK: - Blend modes
+
+enum BlendMode: String, Codable, CaseIterable, Identifiable {
+    case normal, screen, multiply, overlay, add
+    var id: String { rawValue }
+
+    var displayName: String { rawValue.capitalized }
+
+    /// nil = ordinary source-over compositing.
+    var ciFilterName: String? {
+        switch self {
+        case .normal: return nil
+        case .screen: return "CIScreenBlendMode"
+        case .multiply: return "CIMultiplyBlendMode"
+        case .overlay: return "CIOverlayBlendMode"
+        case .add: return "CIAdditionCompositing"
+        }
+    }
+}
+
 // MARK: - Background removal
 
 enum CutoutMode: String, Codable, CaseIterable, Identifiable {

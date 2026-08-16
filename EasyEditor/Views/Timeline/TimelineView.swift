@@ -99,6 +99,7 @@ struct TimelineView: View {
     @State private var anchorFromTop: CGFloat = 40
 
     @State private var dragClipID: UUID?
+    @State private var dragGroupID: UUID?
     @State private var dragTranslation: CGSize = .zero
     @State private var proposedRow: Int?
     @State private var proposedIndex: Int?
@@ -207,19 +208,24 @@ struct TimelineView: View {
         let width = CGFloat(clip.effectiveDuration) * pps
         let height = chipHeight(for: clip)
         let isDragging = dragClipID == clip.id
+        // Members of a dragged group travel with it, horizontally only.
+        let isGroupMember = !isDragging && dragGroupID != nil && clip.groupID == dragGroupID
         let restingY = row.y + (row.height - height) / 2
 
         ClipChipView(clip: clip,
                      projectID: editor.project.id,
                      width: width,
                      height: height,
-                     isSelected: editor.selectedClipID == clip.id,
+                     isSelected: editor.selectedClipIDs.contains(clip.id),
+                     showsTrimHandles: editor.selectedClipID == clip.id,
                      onTrim: { edge, delta, ended in
                          handleTrim(clip: clip, edge: edge, deltaPoints: delta, pps: pps, ended: ended)
                      })
             .contentShape(Rectangle().inset(by: height < 26 ? -9 : 0))
             .offset(x: CGFloat(start) * pps, y: restingY)
-            .offset(isDragging ? dragTranslation : .zero)
+            .offset(x: isDragging ? dragTranslation.width
+                       : (isGroupMember ? dragTranslation.width : 0),
+                    y: isDragging ? dragTranslation.height : 0)
             .scaleEffect(isDragging ? 1.04 : 1)
             .shadow(color: isDragging ? .black.opacity(0.8) : .clear, radius: 8, y: 3)
             .zIndex(isDragging ? 10 : (editor.selectedClipID == clip.id ? 5 : 0))
@@ -323,6 +329,7 @@ struct TimelineView: View {
                 guard case .second(true, let drag?) = value else {
                     if case .second(true, nil) = value, dragClipID == nil {
                         dragClipID = clip.id
+                        dragGroupID = clip.groupID
                         editor.selectedClipID = clip.id
                         editor.playback.pause()
                         Haptics.selection()
@@ -330,7 +337,15 @@ struct TimelineView: View {
                     return
                 }
                 dragClipID = clip.id
+                dragGroupID = clip.groupID
                 dragTranslation = drag.translation
+
+                // A group's stagger depends on its lane assignment, so grouped
+                // clips slide in time only — no cross-lane moves.
+                if clip.groupID != nil {
+                    dragTranslation.height = 0
+                    return
+                }
 
                 // Which slot is the clip's center hovering?
                 guard let homeRow = row(clip.stackIndex, in: rows) else { return }
@@ -363,6 +378,7 @@ struct TimelineView: View {
             .onEnded { value in
                 defer {
                     dragClipID = nil
+                    dragGroupID = nil
                     dragTranslation = .zero
                     proposedRow = nil
                     proposedIndex = nil
@@ -370,7 +386,26 @@ struct TimelineView: View {
                 guard case .second(true, let drag?) = value,
                       let dragged = editor.project.clip(clip.id) else { return }
                 let pps = editor.pixelsPerSecond
-                let newStart = editor.project.start(of: dragged) + Double(drag.translation.width / pps)
+                let delta = Double(drag.translation.width / pps)
+                let newStart = editor.project.start(of: dragged) + delta
+
+                // Grouped: move every member together, keeping the stagger.
+                if let groupID = dragged.groupID {
+                    guard abs(drag.translation.width) > 2 else { return }
+                    var index: Int?
+                    if let primary = editor.project.clips.first(where: {
+                        $0.groupID == groupID && $0.lane == .primary
+                    }) {
+                        let primaryStart = editor.project.start(of: primary) + delta
+                        index = primaryInsertionIndex(
+                            excluding: primary.id,
+                            forTime: primaryStart + primary.effectiveDuration / 2)
+                    }
+                    editor.moveGroup(dragged.id, deltaSeconds: delta, primaryIndex: index)
+                    Haptics.drop()
+                    return
+                }
+
                 let target = proposedRow ?? dragged.stackIndex
 
                 if target != dragged.stackIndex {

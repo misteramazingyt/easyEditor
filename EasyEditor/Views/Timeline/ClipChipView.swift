@@ -9,6 +9,9 @@ struct ClipChipView: View {
     let width: CGFloat
     let height: CGFloat
     let isSelected: Bool
+    /// Only the tapped clip trims — resizing one member of a staggered group
+    /// must not resize the others.
+    var showsTrimHandles: Bool = true
     let onTrim: (_ edge: TrimEdge, _ deltaPoints: CGFloat, _ ended: Bool) -> Void
 
     enum TrimEdge { case leading, trailing }
@@ -29,10 +32,10 @@ struct ClipChipView: View {
                               lineWidth: isSelected ? 2.5 : 1)
         )
         .overlay(alignment: .leading) {
-            if isSelected { handle(.leading) }
+            if isSelected && showsTrimHandles { handle(.leading) }
         }
         .overlay(alignment: .trailing) {
-            if isSelected { handle(.trailing) }
+            if isSelected && showsTrimHandles { handle(.trailing) }
         }
         .overlay(alignment: .bottomLeading) { badges }
     }

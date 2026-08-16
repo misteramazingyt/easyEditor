@@ -106,6 +106,64 @@ enum MediaProcessingService {
         }
     }
 
+    // MARK: - Solid colour
+
+    /// Write a silent solid-colour movie (used for the outro's black canvas).
+    /// A real movie, not a still image: only a clip with media extends the
+    /// composition, and the storyline needs those seconds to exist.
+    static func writeSolidColorVideo(color: CIColor, size: CGSize, length: Double,
+                                     to destination: URL) async throws {
+        let width = Int(size.width) - Int(size.width) % 2
+        let height = Int(size.height) - Int(size.height) % 2
+
+        try? FileManager.default.removeItem(at: destination)
+        let writer = try AVAssetWriter(outputURL: destination, fileType: .mov)
+        let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+        ])
+        writerInput.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: writerInput,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+            ])
+        writer.add(writerInput)
+        guard writer.startWriting() else {
+            throw ProcessingError.writerFailed(writer.error?.localizedDescription ?? "start")
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        guard let pool = adaptor.pixelBufferPool else {
+            throw ProcessingError.writerFailed("no pixel buffer pool")
+        }
+        var maybeBuffer: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(nil, pool, &maybeBuffer)
+        guard let buffer = maybeBuffer else {
+            throw ProcessingError.writerFailed("no pixel buffer")
+        }
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+        CIContext().render(CIImage(color: color).cropped(to: rect), to: buffer,
+                           bounds: rect, colorSpace: CGColorSpaceCreateDeviceRGB())
+
+        let fps = 30
+        for i in 0..<max(1, Int(length * Double(fps))) {
+            while !writerInput.isReadyForMoreMediaData {
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            adaptor.append(buffer, withPresentationTime:
+                            CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps)))
+        }
+        writerInput.markAsFinished()
+        await writer.finishWriting()
+        guard writer.status == .completed else {
+            throw ProcessingError.writerFailed(writer.error?.localizedDescription ?? "finish")
+        }
+    }
+
     // MARK: - Freeze frame
 
     /// Grab the frame of `source` at `sourceTime` and write it out as a

@@ -72,6 +72,15 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     /// Background removal (person segmentation / subject lift / color key).
     var cutout: CutoutMode?
 
+    /// How this clip composites over the layers beneath it.
+    var blend: BlendMode?
+
+    /// Clips sharing a groupID select, move, and delete as one unit.
+    var groupID: UUID?
+
+    /// Audio fade-in, in seconds (music/voice/SFX).
+    var fadeIn: Double?
+
     /// True while this clip's file is still being written by the live
     /// recorder: the timeline draws a growing red chip and the render engine
     /// skips it until the writer finishes.

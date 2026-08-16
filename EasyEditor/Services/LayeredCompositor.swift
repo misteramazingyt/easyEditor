@@ -24,6 +24,7 @@ struct CompositorLayer {
     var effect: EffectPreset?
     var mask: MaskSettings?
     var cutout: CutoutMode?
+    var blend: BlendMode?
 
     // Connected-clip motion (zero clipEnd = no motion evaluation).
     var clipStart: Double = 0
@@ -47,6 +48,7 @@ struct CompositorOverlay {
     var inOut: InOutSettings?
     var loop: LoopAnimationSettings?
     var compositing: CompositingSettings?
+    var blend: BlendMode?
 }
 
 final class CompositorInstruction: NSObject, AVVideoCompositionInstructionProtocol {
@@ -274,7 +276,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 ])
             }
 
-            result = image.cropped(to: canvas).composited(over: result)
+            result = Self.composite(image, over: result, blend: layer.blend, canvas: canvas)
         }
 
         // 7. Title / image overlays (Core Image y-axis points up, placements
@@ -327,12 +329,26 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                     "inputAVector": CIVector(x: 0, y: 0, z: 0, w: a),
                 ])
             }
-            result = image.cropped(to: canvas).composited(over: result)
+            result = Self.composite(image, over: result, blend: overlay.blend, canvas: canvas)
         }
 
         ciContext.render(result, to: output, bounds: canvas,
                          colorSpace: CGColorSpaceCreateDeviceRGB())
         request.finish(withComposedVideoFrame: output)
+    }
+
+    /// Lay one image over another, honouring its blend mode. Core Image's
+    /// blend filters work in RGB, so screening can't tint the frame the way a
+    /// YUV path would.
+    private static func composite(_ image: CIImage, over background: CIImage,
+                                  blend: BlendMode?, canvas: CGRect) -> CIImage {
+        let cropped = image.cropped(to: canvas)
+        guard let filterName = (blend ?? .normal).ciFilterName else {
+            return cropped.composited(over: background)
+        }
+        return cropped
+            .applyingFilter(filterName, parameters: [kCIInputBackgroundImageKey: background])
+            .cropped(to: canvas)
     }
 
     // MARK: - Motion, focus & compositing

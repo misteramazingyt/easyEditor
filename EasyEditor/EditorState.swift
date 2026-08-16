@@ -53,6 +53,13 @@ final class EditorState: ObservableObject {
         selectedClipID.flatMap { project.clip($0) }
     }
 
+    /// Every clip that should draw as selected — a grouped clip highlights
+    /// its whole group.
+    var selectedClipIDs: Set<UUID> {
+        guard let selectedClipID else { return [] }
+        return Set(project.linkedClips(with: selectedClipID).map(\.id))
+    }
+
     init(project: VideoProject, save: @escaping (VideoProject) -> Void) {
         self.project = project
         self.save = save
@@ -324,8 +331,80 @@ final class EditorState: ObservableObject {
 
     func deleteClip(_ id: UUID) {
         pushUndo()
-        project.remove(id)
+        // Grouped clips leave together.
+        for clip in project.linkedClips(with: id) {
+            project.remove(clip.id)
+        }
         if selectedClipID == id { selectedClipID = nil }
+    }
+
+    /// Break a group apart so its clips can be hand-tuned.
+    func ungroupClip(_ id: UUID) {
+        let members = project.linkedClips(with: id)
+        guard members.count > 1 else { return }
+        pushUndo()
+        for clip in members {
+            var updated = clip
+            updated.groupID = nil
+            project.update(updated)
+        }
+        showToast("Ungrouped \(members.count) clips")
+    }
+
+    /// Drag a whole group. If the group owns a storyline clip, the move is a
+    /// magnetic reorder of that clip and everything else shifts by however far
+    /// it actually travelled — that keeps the stagger exact.
+    func moveGroup(_ id: UUID, deltaSeconds: Double, primaryIndex: Int?) {
+        guard let clip = project.clip(id), clip.groupID != nil else { return }
+        let members = project.linkedClips(with: id)
+        guard members.count > 1 else { return }
+        beginGesture()
+
+        if let primary = members.first(where: { $0.lane == .primary }) {
+            guard let primaryIndex else { return }
+            let before = project.start(of: primary)
+            reorderPrimary(primary.id, to: primaryIndex)
+            let after = project.clip(primary.id).map { project.start(of: $0) } ?? before
+            shiftConnected(members, by: after - before)
+        } else {
+            shiftConnected(members, by: deltaSeconds)
+        }
+    }
+
+    private func shiftConnected(_ members: [TimelineClip], by delta: Double) {
+        guard abs(delta) > 0.0001 else { return }
+        for member in members where member.lane != .primary {
+            guard var updated = project.clip(member.id) else { continue }
+            updated.offset = max(0, updated.offset + delta)
+            project.update(updated)
+        }
+    }
+
+    // MARK: - Outro
+
+    func appendOutro() {
+        guard !project.primaryClips.isEmpty else {
+            errorMessage = "Add a clip before appending the outro."
+            return
+        }
+        guard !isProcessing else { return }
+        isProcessing = true
+        Task {
+            defer { isProcessing = false }
+            do {
+                let result = try await OutroBuilder.appendOutro(to: project)
+                pushUndo()
+                project = result.project
+                selectedClipID = nil
+                playback.scrub(to: result.jumpTo)
+                playback.endScrub()
+                showToast("Outro added")
+                Haptics.success()
+            } catch {
+                errorMessage = error.localizedDescription
+                Haptics.warning()
+            }
+        }
     }
 
     func duplicateClip(_ id: UUID) {
