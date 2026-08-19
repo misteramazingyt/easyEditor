@@ -29,7 +29,8 @@ struct ClipChipView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.15),
-                              lineWidth: isSelected ? 2.5 : 1)
+                              style: StrokeStyle(lineWidth: isSelected ? 2.5 : 1,
+                                                 dash: clip.isPlaceholder == true ? [5, 3] : []))
         )
         .overlay(alignment: .leading) {
             if isSelected && showsTrimHandles { handle(.leading) }
@@ -46,6 +47,8 @@ struct ClipChipView: View {
         Group {
             if clip.isLiveRecording == true {
                 Color(red: 0.45, green: 0.09, blue: 0.12)
+            } else if clip.isPlaceholder == true {
+                Color(red: 0.13, green: 0.14, blue: 0.18)
             } else {
                 switch clip.kind {
                 case .video:
@@ -71,6 +74,11 @@ struct ClipChipView: View {
             // The file is still being written — draw the take growing instead
             // of asking AVFoundation for thumbnails of an unfinished movie.
             recordingBars
+        } else if clip.isPlaceholder == true {
+            Label("Tap to fill", systemImage: "plus.viewfinder")
+                .font(.system(size: max(7, min(11, height * 0.24)), weight: .semibold))
+                .foregroundStyle(.white.opacity(0.65))
+                .lineLimit(1)
         } else {
             switch clip.kind {
             case .video:

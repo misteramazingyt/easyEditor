@@ -81,6 +81,10 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     /// Audio fade-in, in seconds (music/voice/SFX).
     var fadeIn: Double?
 
+    /// A stand-in slot on the storyline: black media holding time open for
+    /// footage that hasn't been shot or chosen yet.
+    var isPlaceholder: Bool?
+
     /// True while this clip's file is still being written by the live
     /// recorder: the timeline draws a growing red chip and the render engine
     /// skips it until the writer finishes.

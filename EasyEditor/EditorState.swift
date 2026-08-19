@@ -728,6 +728,12 @@ final class EditorState: ObservableObject {
                 // Opaque fallback: key it at render time instead.
                 if !usedAlpha { clip.cutout = .person }
                 project.update(clip)
+                // A take over an empty timeline has nothing to sit on, and a
+                // storyline with no media has no duration to play. Give it a
+                // slot the same length, ready to be filled.
+                if project.primaryClips.isEmpty {
+                    await addPlaceholder(length: duration, at: clip.offset)
+                }
                 selectedClipID = id
                 showToast("Recorded \(TimeFormat.clock(duration))")
                 Haptics.success()
@@ -739,6 +745,79 @@ final class EditorState: ObservableObject {
             }
             liveClipID = nil
             rebuild()
+        }
+    }
+
+    // MARK: - Placeholder slots
+
+    /// Black media on the storyline, standing in for footage to come.
+    private func addPlaceholder(length: Double, at offset: Double) async {
+        let size = project.aspect.renderSize
+        let fileName = "placeholder-\(UUID().uuidString).mov"
+        let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+        let span = max(1, length + offset)
+        do {
+            try await MediaProcessingService.writeSolidColorVideo(
+                color: CIColor(red: 0, green: 0, blue: 0),
+                size: size, length: span, to: url)
+        } catch {
+            Log.engine.error("Placeholder generation failed: \(error.localizedDescription)")
+            return
+        }
+        var clip = TimelineClip.video(fileName: fileName, duration: span,
+                                      order: project.nextPrimaryOrder)
+        clip.isPlaceholder = true
+        clip.isMuted = true
+        project.append(clip)
+    }
+
+    var selectedIsPlaceholder: Bool {
+        selectedClip?.isPlaceholder == true
+    }
+
+    /// Fill a storyline slot with picked media. Video is cut at the slot's
+    /// end; a still covers the slot from the layer above, since a picture
+    /// carries no track media of its own.
+    func fillSlot(_ id: UUID, with items: [PhotosPickerItem]) {
+        guard let item = items.first, let slotClip = project.clip(id) else { return }
+        isImporting = true
+        Task {
+            defer { isImporting = false }
+            guard let imported = await importer.importPickerItem(item, projectID: project.id) else {
+                errorMessage = "Couldn't import that item."
+                return
+            }
+            guard var clip = project.clip(id) else { return }
+            let slot = slotClip.effectiveDuration
+            let start = project.start(of: slotClip)
+            pushUndo()
+
+            switch imported {
+            case .video(let fileName, let duration):
+                clip.fileName = fileName
+                clip.kind = .video
+                clip.assetDuration = duration
+                clip.trimStart = 0
+                clip.trimEnd = min(slot, duration)
+                clip.speed = 1
+                clip.isMuted = false
+                clip.isPlaceholder = nil
+                project.update(clip)
+                selectedClipID = clip.id
+                showToast("Slot filled")
+            case .image(let fileName):
+                var picture = TimelineClip.image(fileName: fileName, at: start)
+                picture.trimEnd = slot
+                picture.placement = OverlayPlacement(centerX: 0.5, centerY: 0.5,
+                                                     widthFraction: 1)
+                picture.laneIndex = freeStackIndex(for: picture, desired: 1)
+                project.append(picture)
+                selectedClipID = picture.id
+                showToast("Image fills the slot")
+            case .audio:
+                break
+            }
+            Haptics.success()
         }
     }
 

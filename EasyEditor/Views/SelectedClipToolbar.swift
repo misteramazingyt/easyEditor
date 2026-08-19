@@ -13,6 +13,8 @@ struct SelectedClipToolbar: View {
     @EnvironmentObject private var editor: EditorState
     @Binding var activeTool: ClipTool?
     @Binding var transitionAfterClipID: UUID?
+    /// Opens the picker for filling or swapping a storyline slot.
+    var onReplace: (UUID) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -44,6 +46,14 @@ struct SelectedClipToolbar: View {
     @ViewBuilder
     private func tiles(for clip: TimelineClip) -> some View {
         tile("Split", "square.split.2x1") { editor.splitClip(clip.id) }
+
+        // Fill an empty slot, or swap the footage in an existing one.
+        if clip.isPlaceholder == true || (clip.lane == .primary && clip.kind == .video) {
+            tile(clip.isPlaceholder == true ? "Fill" : "Replace",
+                 clip.isPlaceholder == true ? "plus.viewfinder" : "arrow.triangle.2.circlepath") {
+                onReplace(clip.id)
+            }
+        }
 
         // Motion tools — connected clips only, never the main track.
         if clip.lane != .primary && clip.isVisual {

@@ -31,6 +31,9 @@ struct EditorView: View {
     @State private var blinkOn = true
     @State private var isFramingCamera = false
     @State private var showOutroMenu = false
+    @State private var showReplacePicker = false
+    @State private var replaceTargetID: UUID?
+    @State private var replaceMedia: [PhotosPickerItem] = []
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -56,7 +59,11 @@ struct EditorView: View {
                 .environmentObject(editor)
             if editor.selectedClipID != nil {
                 SelectedClipToolbar(activeTool: $activeTool,
-                                    transitionAfterClipID: $transitionAfterClipID)
+                                    transitionAfterClipID: $transitionAfterClipID,
+                                    onReplace: { id in
+                                        replaceTargetID = id
+                                        showReplacePicker = true
+                                    })
                     .environmentObject(editor)
             } else {
                 ToolbarView(
@@ -137,6 +144,16 @@ struct EditorView: View {
                 }
             }
             .environmentObject(editor)
+        }
+        .photosPicker(isPresented: $showReplacePicker,
+                      selection: $replaceMedia,
+                      maxSelectionCount: 1,
+                      matching: .any(of: [.videos, .images]))
+        .onChange(of: replaceMedia) { _, items in
+            guard !items.isEmpty, let target = replaceTargetID else { return }
+            editor.fillSlot(target, with: items)
+            replaceMedia = []
+            replaceTargetID = nil
         }
         .photosPicker(isPresented: $showTimelinePicker,
                       selection: $pickedMedia,
