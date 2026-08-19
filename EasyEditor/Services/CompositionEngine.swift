@@ -450,6 +450,7 @@ struct CompositionEngine {
                     var layer = layerConfig(for: broll, t0: t0, t1: t1,
                                             role: .solo, style: .none,
                                             regionStart: 0, regionEnd: 0)
+                    layer.zOrder = broll.clip.stackIndex
                     layer.clipStart = broll.start
                     layer.clipEnd = broll.end
                     layer.inOut = broll.clip.inOut
@@ -475,7 +476,8 @@ struct CompositionEngine {
                                                       inOut: clip.inOut,
                                                       loop: clip.loopFx,
                                                       compositing: clip.compositing,
-                                                      blend: clip.blend))
+                                                      blend: clip.blend,
+                                                      zOrder: clip.stackIndex))
                 }
             }
 

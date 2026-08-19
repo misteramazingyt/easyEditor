@@ -187,14 +187,69 @@ final class URLCaptureController: NSObject, ObservableObject, WKNavigationDelega
 
     private static let highlightScript = """
     (function () {
-      const STYLE_ID = "__ee_hl_style";
-      function ensureStyle() {
-        if (document.getElementById(STYLE_ID)) return;
-        const s = document.createElement("style");
-        s.id = STYLE_ID;
-        s.textContent = "mark.__ee_hl{background:#FFE783;color:inherit;" +
-          "border-radius:2px;box-shadow:0 0 0 2px #FFE783;}";
-        (document.head || document.documentElement).appendChild(s);
+      // Colour parsing kept regex-free: computed styles are always rgb()/rgba().
+      function parseColor(value) {
+        if (!value) return null;
+        const open = value.indexOf("(");
+        const close = value.lastIndexOf(")");
+        if (open < 0 || close < open) return null;
+        const parts = value.slice(open + 1, close).split(",").map(function (n) {
+          return parseFloat(n);
+        });
+        if (parts.length < 3 || parts.some(isNaN)) return null;
+        return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+      }
+
+      function luminance(c) {
+        const channel = function (v) {
+          v = v / 255;
+          return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+      }
+
+      function contrast(a, b) {
+        const la = luminance(a), lb = luminance(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+      }
+
+      function rgb(c) {
+        return "rgb(" + Math.round(c.r) + "," + Math.round(c.g) + "," + Math.round(c.b) + ")";
+      }
+
+      // The nearest ancestor that actually paints something.
+      function backdropOf(node) {
+        let el = node;
+        while (el && el.nodeType === 1) {
+          const c = parseColor(getComputedStyle(el).backgroundColor);
+          if (c && c.a > 0.2) return c;
+          el = el.parentElement;
+        }
+        return { r: 255, g: 255, b: 255, a: 1 };
+      }
+
+      // A dark page keeps its light type, so it gets a deep amber marker; a
+      // light page gets the familiar yellow. Either way the ink is flipped if
+      // the page's own text colour wouldn't read on it.
+      function styleMark(mark) {
+        const inherited = parseColor(getComputedStyle(mark).color) || { r: 0, g: 0, b: 0, a: 1 };
+        const page = backdropOf(mark.parentElement);
+        const dark = luminance(page) < 0.35;
+        const bg = dark ? { r: 110, g: 82, b: 0 } : { r: 255, g: 231, b: 131 };
+        let ink = inherited;
+        if (contrast(inherited, bg) < 4.5) {
+          const black = { r: 20, g: 20, b: 20 };
+          const white = { r: 255, g: 255, b: 255 };
+          ink = contrast(black, bg) >= contrast(white, bg) ? black : white;
+        }
+        const bgCSS = rgb(bg), inkCSS = rgb(ink);
+        mark.style.setProperty("background-color", bgCSS, "important");
+        mark.style.setProperty("color", inkCSS, "important");
+        // Sites that clip a gradient to their text ignore `color` alone.
+        mark.style.setProperty("-webkit-text-fill-color", inkCSS, "important");
+        mark.style.setProperty("text-shadow", "none", "important");
+        mark.style.setProperty("box-shadow", "0 0 0 2px " + bgCSS, "important");
+        mark.style.setProperty("border-radius", "2px", "important");
       }
 
       window.__eeReady = function () {

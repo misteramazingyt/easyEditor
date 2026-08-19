@@ -25,6 +25,8 @@ struct CompositorLayer {
     var mask: MaskSettings?
     var cutout: CutoutMode?
     var blend: BlendMode?
+    /// Timeline stacking slot: 0 is the storyline, +n stacks above it.
+    var zOrder: Int = 0
 
     // Connected-clip motion (zero clipEnd = no motion evaluation).
     var clipStart: Double = 0
@@ -49,6 +51,8 @@ struct CompositorOverlay {
     var loop: LoopAnimationSettings?
     var compositing: CompositingSettings?
     var blend: BlendMode?
+    /// Timeline stacking slot, shared scale with CompositorLayer.
+    var zOrder: Int = 0
 }
 
 final class CompositorInstruction: NSObject, AVVideoCompositionInstructionProtocol {
@@ -114,6 +118,17 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         let canvas = CGRect(origin: .zero, size: size)
         var result = CIImage(color: CIColor(red: 0, green: 0, blue: 0))
             .cropped(to: canvas)
+
+        // Video frames and stills are prepared separately but must composite
+        // in one order — the timeline's — or an image would always cover a
+        // video no matter which slot each sits in.
+        struct Pending {
+            let z: Int
+            let seq: Int
+            let image: CIImage
+            let blend: BlendMode?
+        }
+        var pending: [Pending] = []
 
         // 0…1 progress through this instruction, for ramps.
         let range = instruction.timeRange
@@ -276,7 +291,8 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 ])
             }
 
-            result = Self.composite(image, over: result, blend: layer.blend, canvas: canvas)
+            pending.append(Pending(z: layer.zOrder, seq: pending.count,
+                                   image: image, blend: layer.blend))
         }
 
         // 7. Title / image overlays (Core Image y-axis points up, placements
@@ -329,7 +345,15 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                     "inputAVector": CIVector(x: 0, y: 0, z: 0, w: a),
                 ])
             }
-            result = Self.composite(image, over: result, blend: overlay.blend, canvas: canvas)
+            pending.append(Pending(z: overlay.zOrder, seq: pending.count,
+                                   image: image, blend: overlay.blend))
+        }
+
+        // Lowest slot first; ties keep their build order (an outgoing clip
+        // stays under the incoming one through a transition).
+        for item in pending.sorted(by: { ($0.z, $0.seq) < ($1.z, $1.seq) }) {
+            result = Self.composite(item.image, over: result,
+                                    blend: item.blend, canvas: canvas)
         }
 
         ciContext.render(result, to: output, bounds: canvas,
