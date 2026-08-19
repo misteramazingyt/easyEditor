@@ -24,18 +24,32 @@ pub struct Bridge {
 /// if the JSON can't be parsed, so a bad file costs fidelity rather than the
 /// feature. Returns null only if the effect itself couldn't be constructed.
 ///
+/// `parsed_out`, if given, is set to whether the JSON actually took. Without
+/// it a preset that fails to parse is indistinguishable from one that works:
+/// every look silently becomes the default, which is exactly the failure that
+/// is hardest to notice and worst to ship.
+///
 /// # Safety
-/// `json` must be a valid NUL-terminated C string, or null for defaults.
+/// `json` must be a valid NUL-terminated C string, or null for defaults;
+/// `parsed_out` must be null or point to a writable bool.
 #[no_mangle]
-pub unsafe extern "C" fn ntsc_bridge_create(json: *const c_char) -> *mut Bridge {
+pub unsafe extern "C" fn ntsc_bridge_create(
+    json: *const c_char,
+    parsed_out: *mut bool,
+) -> *mut Bridge {
+    let mut parsed = false;
     let result = catch_unwind(AssertUnwindSafe(|| {
         let effect = if json.is_null() {
             NtscEffect::default()
         } else {
             match CStr::from_ptr(json).to_str() {
-                Ok(text) => SettingsList::<NtscEffect>::new()
-                    .from_json_generic(text)
-                    .unwrap_or_default(),
+                Ok(text) => match SettingsList::<NtscEffect>::new().from_json_generic(text) {
+                    Ok(effect) => {
+                        parsed = true;
+                        effect
+                    }
+                    Err(_) => NtscEffect::default(),
+                },
                 Err(_) => NtscEffect::default(),
             }
         };
@@ -44,6 +58,9 @@ pub unsafe extern "C" fn ntsc_bridge_create(json: *const c_char) -> *mut Bridge 
             ctx: Context::new(),
         }))
     }));
+    if !parsed_out.is_null() {
+        *parsed_out = parsed;
+    }
     result.unwrap_or(ptr::null_mut())
 }
 

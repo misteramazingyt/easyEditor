@@ -29,6 +29,10 @@ struct CompositorLayer {
     var zOrder: Int = 0
     /// Whether this layer's light spills into the backdrop.
     var castsCaustics: Bool = true
+    /// Black media that exists only so the timeline has a surface to play —
+    /// an empty placeholder slot, or the filler under a stills-only project.
+    /// It is scaffolding, not picture.
+    var isScaffold = false
 
     // Connected-clip motion (zero clipEnd = no motion evaluation).
     var clipStart: Double = 0
@@ -144,6 +148,10 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         let progress = min(1, max(0, elapsed / total))
 
         for layer in instruction.layers {
+            // Scaffolding is opaque black across the whole canvas, so drawing
+            // it would bury the treated backdrop under exactly the black the
+            // backdrop replaces.
+            if layer.isScaffold, instruction.aesthetic != nil { continue }
             guard let buffer = request.sourceFrame(byTrackID: layer.trackID) else { continue }
             var image = CIImage(cvPixelBuffer: buffer)
 
@@ -388,10 +396,11 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                                     blend: item.blend, canvas: canvas)
         }
 
-        // The picture takes a lighter dose than the ground it sits on.
+        // The whole frame wears the treatment at the strength that was asked
+        // for — at 100% that is precisely the look on the gallery tile.
         if let aesthetic = instruction.aesthetic {
             result = AestheticRenderer.treat(result, aesthetic, canvas: canvas,
-                                             time: time, weight: 0.55)
+                                             time: time, weight: 1)
         }
 
         ciContext.render(result, to: output, bounds: canvas,

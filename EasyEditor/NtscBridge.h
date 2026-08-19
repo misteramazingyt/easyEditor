@@ -8,7 +8,10 @@
 typedef struct Bridge NtscBridge;
 
 /// Build an effect from ntsc-rs preset JSON (pass NULL for the defaults).
-NtscBridge *ntsc_bridge_create(const char *json);
+/// `parsed_out` may be NULL; otherwise it reports whether the JSON took, so a
+/// preset that silently fell back to the defaults can be told apart from one
+/// that worked.
+NtscBridge *ntsc_bridge_create(const char *json, bool *parsed_out);
 
 /// Apply the effect in place to a packed RGBA8 buffer.
 bool ntsc_bridge_process(NtscBridge *handle, unsigned char *pixels,

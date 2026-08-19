@@ -21,6 +21,39 @@ final class NtscRSProcessor {
     private var handle: OpaquePointer?
     private var loadedPresetID: String?
 
+    /// What the last preset load and the last frame actually did. Read by the
+    /// aesthetics sheet: when ntsc-rs falls back, every preset renders the
+    /// same default look, and nothing on screen says so.
+    enum Status: Equatable {
+        case idle
+        case running(preset: String)
+        /// The JSON loaded but ntsc-rs wouldn't take it — the default effect
+        /// is running instead, so every preset looks alike.
+        case presetRejected(preset: String)
+        case missingPreset(String)
+        case unavailable
+
+        var blurb: String {
+            switch self {
+            case .idle: return "ntsc-rs idle"
+            case .running(let preset): return "ntsc-rs running \(preset)"
+            case .presetRejected(let preset):
+                return "ntsc-rs rejected \(preset) — showing its default look"
+            case .missingPreset(let preset): return "preset \(preset) missing from the bundle"
+            case .unavailable: return "ntsc-rs unavailable — falling back to the shader"
+            }
+        }
+
+        var isHealthy: Bool { if case .running = self { return true } else { return false } }
+    }
+
+    private var statusLock = NSLock()
+    private var _status: Status = .idle
+    private(set) var status: Status {
+        get { statusLock.lock(); defer { statusLock.unlock() }; return _status }
+        set { statusLock.lock(); _status = newValue; statusLock.unlock() }
+    }
+
     static let shared = NtscRSProcessor()
 
     private init() {}
@@ -38,16 +71,30 @@ final class NtscRSProcessor {
             self.handle = nil
         }
         var json: String?
-        if let presetID,
-           let url = Bundle.main.url(forResource: presetID, withExtension: "json") {
-            json = try? String(contentsOf: url, encoding: .utf8)
+        if let presetID {
+            if let url = Bundle.main.url(forResource: presetID, withExtension: "json") {
+                json = try? String(contentsOf: url, encoding: .utf8)
+            }
+            if json == nil {
+                Log.engine.error("ntsc-rs preset \(presetID) is not in the bundle")
+                status = .missingPreset(presetID)
+            }
         }
-        handle = json.map { text in text.withCString { ntsc_bridge_create($0) } }
-            ?? ntsc_bridge_create(nil)
+        var parsed = false
+        handle = json.map { text in
+            text.withCString { ntsc_bridge_create($0, &parsed) }
+        } ?? ntsc_bridge_create(nil, &parsed)
         loadedPresetID = presetID
         if handle == nil {
             Log.engine.error("ntsc-rs effect could not be created")
+            status = .unavailable
             return false
+        }
+        if let presetID, json != nil {
+            status = parsed ? .running(preset: presetID) : .presetRejected(preset: presetID)
+            if !parsed {
+                Log.engine.error("ntsc-rs would not take preset \(presetID); using its defaults")
+            }
         }
         return true
     }
@@ -58,7 +105,10 @@ final class NtscRSProcessor {
                  frame: Int) -> CIImage? {
         lock.lock()
         defer { lock.unlock() }
-        guard ensureEffect(presetID: presetID), let handle else { return nil }
+        guard ensureEffect(presetID: presetID), let handle else {
+            status = .unavailable
+            return nil
+        }
 
         let scale = min(1, Self.processingWidth / max(1, canvas.width))
         let width = Int((canvas.width * scale).rounded())
@@ -84,7 +134,10 @@ final class NtscRSProcessor {
             guard let base = buffer.baseAddress else { return false }
             return ntsc_bridge_process(handle, base, width, height, frame, artefactScale)
         }
-        guard ok else { return nil }
+        guard ok else {
+            status = .unavailable
+            return nil
+        }
 
         let data = Data(pixels)
         let processed = CIImage(bitmapData: data, bytesPerRow: rowBytes,

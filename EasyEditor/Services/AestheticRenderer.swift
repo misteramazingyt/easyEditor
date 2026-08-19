@@ -144,8 +144,12 @@ enum AestheticRenderer {
 
     // MARK: - Backdrop
 
-    /// The ground the picture sits on: a dark field with the mode's glow,
-    /// drifting snow, scanlines, and a slow smeared ghost of the picture.
+    /// The ground the picture sits on: a dark field with the mode's glow and a
+    /// slow smeared ghost of the picture.
+    ///
+    /// Untreated on purpose. The picture is composited onto this and the whole
+    /// frame goes through the tube once, which is both what a television
+    /// actually does and half the work of treating the two separately.
     static func backdrop(_ config: AestheticFrameConfig, canvas: CGRect,
                          time: Double, ghost: CIImage?) -> CIImage {
         let tint = config.mode.tint
@@ -188,8 +192,7 @@ enum AestheticRenderer {
             }
         }
 
-        // The backdrop wears the treatment at full weight.
-        return treat(image, config, canvas: canvas, time: time, weight: 1)
+        return image
     }
 
     // MARK: - Caustic spill
@@ -209,9 +212,8 @@ enum AestheticRenderer {
 
     // MARK: - The treatment itself
 
-    /// `weight` 1 = the backdrop's full dose; ~0.38 = the lighter pass the
-    /// picture gets, so the frame reads as doused without the footage
-    /// disappearing under it.
+    /// `weight` scales the configured strength; the compositor runs the whole
+    /// frame through at 1, so what plays back is what the gallery tile showed.
     static func treat(_ input: CIImage, _ config: AestheticFrameConfig,
                       canvas: CGRect, time: Double, weight: Double) -> CIImage {
         let p = config.params
@@ -237,7 +239,7 @@ enum AestheticRenderer {
             return tube.cropped(to: canvas)
         }
         // NTSC goes through the real ntsc-rs, driven by the preset itself.
-        if config.mode == .ntsc, weight > 0.5,
+        if config.mode == .ntsc,
            let processed = NtscRSProcessor.shared.process(image, canvas: canvas,
                                                           presetID: config.presetID,
                                                           frame: Int(time * 30)) {

@@ -6,6 +6,7 @@ import SwiftUI
 struct AestheticsSheet: View {
     @EnvironmentObject private var editor: EditorState
     @Environment(\.dismiss) private var dismiss
+    @State private var ntscStatus: NtscRSProcessor.Status = .idle
 
     private var settings: AestheticSettings {
         editor.project.aesthetic ?? AestheticSettings()
@@ -49,6 +50,7 @@ struct AestheticsSheet: View {
                     if settings.mode != .none {
                         strengthSection
                         causticsSection
+                        engineStatus
                     }
                 }
                 .padding(.horizontal, 16)
@@ -222,6 +224,43 @@ struct AestheticsSheet: View {
         }
         .padding(14)
         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    // MARK: Engine status
+
+    /// When ntsc-rs won't take a preset it quietly runs its own defaults, and
+    /// every look on the wheel comes out the same. That is worth saying out
+    /// loud rather than leaving you to wonder why nothing changes.
+    @ViewBuilder
+    private var engineStatus: some View {
+        let healthy = settings.mode != .ntsc || ntscStatus.isHealthy
+        HStack(spacing: 6) {
+            Image(systemName: healthy ? "checkmark.seal" : "exclamationmark.triangle.fill")
+            Text(statusLine).lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .font(.caption2)
+        .foregroundStyle(healthy ? Color.secondary : .orange)
+        .task {
+            while !Task.isCancelled {
+                ntscStatus = NtscRSProcessor.shared.status
+                try? await Task.sleep(nanoseconds: 700_000_000)
+            }
+        }
+    }
+
+    private var statusLine: String {
+        switch settings.mode {
+        case .none: return ""
+        case .crt, .vhs:
+            return AestheticKernel.shared.isAvailable
+                ? "Rendered on the GPU."
+                : "Shaders unavailable — showing a filter-chain stand-in."
+        case .ntsc:
+            return ntscStatus.isHealthy
+                ? "Rendered by ntsc-rs, from this preset."
+                : ntscStatus.blurb
+        }
     }
 
     private func label(_ text: String) -> some View {

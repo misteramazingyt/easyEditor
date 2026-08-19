@@ -516,7 +516,9 @@ struct CompositionEngine {
             // Every instruction needs at least one source, or AVFoundation has
             // no reason to call the compositor for that interval.
             if layers.isEmpty, let fillerTrackID {
-                layers.append(CompositorLayer(trackID: fillerTrackID))
+                var filler = CompositorLayer(trackID: fillerTrackID)
+                filler.isScaffold = true
+                layers.append(filler)
             }
 
             let range = CMTimeRange(
@@ -554,6 +556,7 @@ struct CompositionEngine {
                                     blend: clip.blend)
         layer.startOpacity = clip.effectiveOpacity
         layer.endOpacity = clip.effectiveOpacity
+        layer.isScaffold = clip.isPlaceholder == true
         guard role != .solo, regionEnd > regionStart else { return layer }
 
         // Normalized transition progress at this instruction's endpoints.

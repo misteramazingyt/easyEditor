@@ -327,8 +327,9 @@ struct AestheticSettings: Codable, Equatable {
     var mode: AestheticMode = .none
     /// Bundled ntsc-rs preset slug driving the parameters.
     var presetID: String?
-    /// 0…1, scales everything.
-    var strength: Double = 0.6
+    /// 0…1, scales everything. At 1 the frame wears exactly the look shown on
+    /// the gallery tile.
+    var strength: Double = 0.85
     /// How much the picture spills light into the backdrop.
     var caustics: Double = 0.5
     /// Camera takes usually shouldn't smear the room with their own glow.
