@@ -91,23 +91,15 @@ struct URLCaptureSheet: View {
     /// reading the pasteboard's text would.
     private func autoPaste() async {
         guard urlText.isEmpty else { return }
-        let patterns: Set<UIPasteboard.DetectionPattern> = [.probableWebURL]
-        guard let values = try? await UIPasteboard.general.detectedValues(for: patterns) else {
+        let detected = try? await UIPasteboard.general.detectedValues(for: [\.probableWebURL])
+        // String(describing:) so this holds whether the system hands back a
+        // String or a URL.
+        guard let probable = detected?.probableWebURL else {
             urlFocused = true
             return
         }
-        var candidate: String?
-        let value = values[.probableWebURL]
-        if let text = value as? String {
-            candidate = text
-        } else if let list = value as? [String] {
-            candidate = list.first
-        } else if let url = value as? URL {
-            candidate = url.absoluteString
-        } else if let urls = value as? [URL] {
-            candidate = urls.first?.absoluteString
-        }
-        guard let candidate, !candidate.isEmpty else {
+        let candidate = String(describing: probable).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty else {
             urlFocused = true
             return
         }
