@@ -229,6 +229,13 @@ enum AestheticRenderer {
         case .none: modeIndex = -1
         }
         var kernelHandled = false
+        // CRT is crtemu's tube, ported whole.
+        if config.mode == .crt,
+           let tube = AestheticKernel.shared.applyCRT(to: image, canvas: canvas,
+                                                      strength: s, time: time),
+           !tube.extent.isEmpty {
+            return tube.cropped(to: canvas)
+        }
         // NTSC goes through the real ntsc-rs, driven by the preset itself.
         if config.mode == .ntsc, weight > 0.5,
            let processed = NtscRSProcessor.shared.process(image, canvas: canvas,
