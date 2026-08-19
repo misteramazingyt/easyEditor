@@ -79,7 +79,7 @@ enum KeyframeResolver {
     static func transform(_ base: ClipTransform, _ keys: KeyframeTrack<ClipTransform>?,
                           at time: Double, clipStart: Double) -> ClipTransform {
         guard let keys, keys.isActive else { return base }
-        return keys.value(at: time - clipStart) ?? base
+        return keys.transform(at: time - clipStart) ?? base
     }
 
     static func composite(_ base: CompositeValue, _ keys: KeyframeTrack<CompositeValue>?,
@@ -244,7 +244,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 let box = image.extent
                 var t = CGAffineTransform(translationX: -box.midX, y: -box.midY)
                 t = t.concatenating(CGAffineTransform(scaleX: CGFloat(placed.scale),
-                                                      y: CGFloat(placed.scale)))
+                                                      y: CGFloat(placed.heightScale)))
                 t = t.concatenating(CGAffineTransform(
                     rotationAngle: -CGFloat(placed.rotation) * .pi / 180))
                 t = t.concatenating(CGAffineTransform(
@@ -391,7 +391,8 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             let centerY = size.height * (1 - CGFloat(placed.centerY)) - motion.offset.y
             var t = CGAffineTransform(translationX: centerX, y: centerY)
             t = t.rotated(by: -motion.rotation - CGFloat(placed.rotation) * .pi / 180)
-            t = t.scaledBy(x: scale * motion.scaleX, y: scale * motion.scaleY)
+            let stretch = CGFloat(placed.heightScale / max(0.0001, placed.scale))
+            t = t.scaledBy(x: scale * motion.scaleX, y: scale * stretch * motion.scaleY)
             t = t.translatedBy(x: -extent.midX, y: -extent.midY)
             image = image.transformed(by: t)
 

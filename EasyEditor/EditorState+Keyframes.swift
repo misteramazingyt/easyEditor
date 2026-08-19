@@ -127,6 +127,34 @@ extension EditorState {
         return keys.keys[index].easing
     }
 
+    // MARK: - Editing the path itself
+
+    /// Drag a keyframe marker in the viewer. The key keeps its time; only
+    /// where the layer is at that moment changes.
+    func moveMotionKey(_ id: UUID, key: UUID, to center: CGPoint, live: Bool = true) {
+        guard var clip = project.clip(id), var keys = clip.motionKeys else { return }
+        if !live { markUndoPoint() }
+        keys.moveKey(id: key, to: center)
+        clip.motionKeys = keys
+        project.update(clip)
+    }
+
+    /// Drag a spline handle. The opposite handle mirrors, so the curve stays
+    /// smooth through the key rather than gaining a corner.
+    func setMotionTangent(_ id: UUID, key: UUID, outgoing: Bool, to control: CGPoint) {
+        guard var clip = project.clip(id), var keys = clip.motionKeys else { return }
+        keys.setTangent(id: key, outgoing: outgoing, to: control)
+        clip.motionKeys = keys
+        project.update(clip)
+    }
+
+    /// Put the playhead on a keyframe, so tapping one in the viewer shows you
+    /// the frame it belongs to.
+    func scrubToKey(_ clip: TimelineClip, time local: Double) {
+        scrub(to: project.start(of: clip) + local)
+        endScrub()
+    }
+
     // MARK: - Canvas geometry
 
     /// Which visual layer is under this point on the canvas, topmost first.
@@ -164,7 +192,8 @@ extension EditorState {
         let canvas = project.aspect.renderSize
         let t = liveTransform(of: clip)
         let width = clip.usesPlacement ? canvas.width * t.scale : natural.width * t.scale
-        let height = width * natural.height / max(1, natural.width)
+        let stretch = t.heightScale / max(0.0001, t.scale)
+        let height = width * natural.height / max(1, natural.width) * stretch
         return CGRect(x: canvas.width * t.centerX - width / 2,
                       y: canvas.height * t.centerY - height / 2,
                       width: width, height: height)
