@@ -109,6 +109,12 @@ final class EditorState: ObservableObject {
         }
     }
 
+    /// Restart the heartbeat after a spurious teardown (presenting a
+    /// full-screen cover fires the editor's onDisappear on some iOS versions).
+    func resumeAutosave() {
+        if autosaveTask == nil { startAutosave() }
+    }
+
     func stopAutosave() {
         autosaveTask?.cancel()
         autosaveTask = nil

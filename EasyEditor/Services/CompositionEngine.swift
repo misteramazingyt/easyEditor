@@ -40,7 +40,12 @@ struct CompositionEngine {
         project.clips.removeAll { $0.isLiveRecording == true }
         let composition = AVMutableComposition()
         let ordered = project.primaryClips.filter { $0.fileName != nil }
-        guard !ordered.isEmpty else { throw EngineError.noVideoContent }
+        // A project can legitimately have no storyline video — quote cards,
+        // images, titles, or b-roll on a connected layer. Only a genuinely
+        // empty project has nothing to show.
+        guard !ordered.isEmpty || !project.clips.isEmpty else {
+            throw EngineError.noVideoContent
+        }
 
         guard let videoA = composition.addMutableTrack(withMediaType: .video,
                                                       preferredTrackID: kCMPersistentTrackID_Invalid),
@@ -120,7 +125,15 @@ struct CompositionEngine {
                                       start: start, end: start + clip.effectiveDuration,
                                       isBroll: false))
         }
-        guard placed.contains(where: { !$0.isBroll }) else { throw EngineError.noVideoContent }
+        // No storyline video? Lay a black canvas track under everything so the
+        // composition has both a surface and a duration.
+        var fillerTrackID: CMPersistentTrackID?
+        if !placed.contains(where: { !$0.isBroll }) {
+            fillerTrackID = try await insertBlackFiller(
+                into: videoA, project: project,
+                seconds: max(project.duration, 1))
+            guard fillerTrackID != nil else { throw EngineError.noVideoContent }
+        }
 
         // MARK: Connected b-roll (own track per clip; stacks over the storyline)
         let brolls = project.clips
@@ -212,7 +225,8 @@ struct CompositionEngine {
         let videoComposition = buildInstructions(
             project: project, placed: placed, overlayClips: overlayClips,
             overlayImages: overlayImages, renderSize: renderSize,
-            compositionDuration: composition.duration.seconds)
+            compositionDuration: composition.duration.seconds,
+            fillerTrackID: fillerTrackID)
 
         let audioMix = AVMutableAudioMix()
         audioMix.inputParameters = mixParams
@@ -246,6 +260,51 @@ struct CompositionEngine {
             }
         }
         return result
+    }
+
+    // MARK: - Black canvas filler
+
+    /// Insert a looping black clip so a storyline with no video still has a
+    /// surface to composite onto and a duration to play. Generated once per
+    /// project + canvas size.
+    private func insertBlackFiller(into track: AVMutableCompositionTrack,
+                                   project: VideoProject,
+                                   seconds: Double) async throws -> CMPersistentTrackID? {
+        let size = project.aspect.renderSize
+        let fileName = "canvas-black-\(Int(size.width))x\(Int(size.height)).mov"
+        let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            do {
+                try await MediaProcessingService.writeSolidColorVideo(
+                    color: CIColor(red: 0, green: 0, blue: 0),
+                    size: size, length: 4, to: url)
+            } catch {
+                Log.engine.error("Black filler generation failed: \(error.localizedDescription)")
+                return nil
+            }
+        }
+        let asset = AVURLAsset(url: url)
+        guard let source = try? await asset.loadTracks(withMediaType: .video).first else {
+            return nil
+        }
+        let unit = (try? await asset.load(.duration)) ?? CMTime(seconds: 4, preferredTimescale: 600)
+        guard unit.seconds > 0.1 else { return nil }
+
+        let total = CMTime(seconds: seconds, preferredTimescale: Self.timescale)
+        var cursor = CMTime.zero
+        while cursor < total {
+            let chunk = CMTimeMinimum(unit, CMTimeSubtract(total, cursor))
+            guard chunk.seconds > 0.01 else { break }
+            do {
+                try track.insertTimeRange(CMTimeRange(start: .zero, duration: chunk),
+                                          of: source, at: cursor)
+            } catch {
+                Log.engine.error("Black filler insert failed: \(error.localizedDescription)")
+                break
+            }
+            cursor = CMTimeAdd(cursor, chunk)
+        }
+        return cursor > .zero ? track.trackID : nil
     }
 
     // MARK: - Focus windows (main-track blur/darken under connected clips)
@@ -303,7 +362,8 @@ struct CompositionEngine {
                                    overlayClips: [TimelineClip],
                                    overlayImages: [UUID: CIImage],
                                    renderSize: CGSize,
-                                   compositionDuration: Double) -> AVMutableVideoComposition? {
+                                   compositionDuration: Double,
+                                   fillerTrackID: CMPersistentTrackID? = nil) -> AVMutableVideoComposition? {
         let epsilon = 1.0 / 240.0
         let duration = max(compositionDuration, project.duration)
         guard duration > 0 else { return nil }
@@ -417,6 +477,12 @@ struct CompositionEngine {
                                                       compositing: clip.compositing,
                                                       blend: clip.blend))
                 }
+            }
+
+            // Every instruction needs at least one source, or AVFoundation has
+            // no reason to call the compositor for that interval.
+            if layers.isEmpty, let fillerTrackID {
+                layers.append(CompositorLayer(trackID: fillerTrackID))
             }
 
             let range = CMTimeRange(

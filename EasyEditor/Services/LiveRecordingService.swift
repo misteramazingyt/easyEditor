@@ -5,6 +5,31 @@ import CoreVideo
 import UIKit
 import VideoToolbox
 
+/// Where the keyed camera sits on the canvas. Unit coordinates, y down;
+/// scale 1 = the camera frame aspect-fills the canvas.
+struct CameraFraming: Equatable {
+    var centerX: Double = 0.5
+    var centerY: Double = 0.5
+    var scale: Double = 1
+
+    static let identity = CameraFraming()
+}
+
+/// Lets the capture queue read framing the UI writes on the main thread.
+final class CameraFramingBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = CameraFraming.identity
+
+    func store(_ newValue: CameraFraming) {
+        lock.lock(); value = newValue; lock.unlock()
+    }
+
+    func current() -> CameraFraming {
+        lock.lock(); defer { lock.unlock() }
+        return value
+    }
+}
+
 /// Thread-safe holder for the latest keyed camera frame, so the capture queue
 /// and the Metal preview never touch the same CIImage reference at once.
 final class LiveFrameBuffer: @unchecked Sendable {
@@ -38,8 +63,16 @@ final class LiveRecordingService: NSObject, ObservableObject,
     @Published private(set) var elapsed: Double = 0
     @Published var errorMessage: String?
 
+    /// Position and size of the camera on the canvas. Edited live from the
+    /// preview's bounding box and baked into the recording, so what you frame
+    /// is what gets written.
+    @Published var framing = CameraFraming.identity {
+        didSet { framingBox.store(framing) }
+    }
+
     /// Latest keyed frame, for the on-screen overlay.
     let frames = LiveFrameBuffer()
+    private let framingBox = CameraFramingBox()
 
     // MARK: Capture
 
@@ -337,11 +370,16 @@ final class LiveRecordingService: NSObject, ObservableObject,
             keyed = CutoutService.masked(raw, with: mask)
         }
         let canvas = CGRect(origin: .zero, size: renderSize)
-        let scale = max(canvas.width / keyed.extent.width, canvas.height / keyed.extent.height)
+        let framing = framingBox.current()
+        let fill = max(canvas.width / keyed.extent.width, canvas.height / keyed.extent.height)
+        let scale = fill * max(0.05, framing.scale)
         let scaled = keyed.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        // Framing is y-down (UI space); Core Image is y-up.
+        let target = CGPoint(x: canvas.width * framing.centerX,
+                             y: canvas.height * (1 - framing.centerY))
         let centered = scaled.transformed(by: CGAffineTransform(
-            translationX: canvas.midX - scaled.extent.midX,
-            y: canvas.midY - scaled.extent.midY))
+            translationX: target.x - scaled.extent.midX,
+            y: target.y - scaled.extent.midY))
         let clear = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0)).cropped(to: canvas)
         let composed = centered.composited(over: clear).cropped(to: canvas)
 

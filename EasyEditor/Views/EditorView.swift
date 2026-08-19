@@ -28,6 +28,7 @@ struct EditorView: View {
     @State private var showQuotes = false
     @State private var showMyQuotes = false
     @State private var blinkOn = true
+    @State private var isFramingCamera = false
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -72,6 +73,7 @@ struct EditorView: View {
         .onAppear {
             saveBox.save = { appState.save($0) }
             Haptics.prepare()
+            editor.resumeAutosave()
         }
         .onDisappear {
             // Covers every way out of the editor, not just the close buttons.
@@ -283,10 +285,10 @@ struct EditorView: View {
                 }
             }
             // Keyed camera, composited over whatever the layers are showing.
+            // Tap it for a bounding box to move and resize yourself.
             if editor.recordingState != .idle {
-                CameraCutoutPreview(frames: editor.recorder.frames)
+                CameraFramingView(recorder: editor.recorder, isFraming: $isFramingCamera)
                     .aspectRatio(canvasAspect, contentMode: .fit)
-                    .allowsHitTesting(false)
             }
             if editor.isImporting || editor.isRebuilding || editor.isGeneratingCaptions || editor.isProcessing {
                 VStack(spacing: 8) {
