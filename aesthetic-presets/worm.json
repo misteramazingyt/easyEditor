@@ -58,6 +58,5 @@
  "chroma_demodulation": 1,
  "chroma_noise": true,
  "chroma_noise_frequency": 0.05000000074505806,
- "vhs_sharpen_frequency": 4,
- "_name": "Worm"
+ "vhs_sharpen_frequency": 4
 }

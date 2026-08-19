@@ -58,6 +58,5 @@
  "ringing": false,
  "head_switching_horizontal_shift": 11,
  "luma_noise_detail": 1,
- "vhs_sharpen": 3.5,
- "_name": "HD Broadcast"
+ "vhs_sharpen": 3.5
 }

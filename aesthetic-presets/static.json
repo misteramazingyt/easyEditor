@@ -58,6 +58,5 @@
  "vhs_settings": true,
  "tracking_noise_snow_anisotropy": 0,
  "ringing_power": 10,
- "head_switching_mid_line_jitter": 1,
- "_name": "Static"
+ "head_switching_mid_line_jitter": 1
 }

@@ -61,6 +61,5 @@
  "bandwidth_scale": 1.789,
  "vertical_scale": 1.255,
  "scale_with_video_size": false,
- "version": 1,
- "_name": "Oversharp"
+ "version": 1
 }

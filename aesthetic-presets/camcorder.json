@@ -61,6 +61,5 @@
  "bandwidth_scale": 0.916,
  "vertical_scale": 1.71,
  "scale_with_video_size": false,
- "version": 1,
- "_name": "Camcorder"
+ "version": 1
 }

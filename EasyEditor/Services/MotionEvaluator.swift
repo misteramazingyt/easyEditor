@@ -52,6 +52,12 @@ enum MotionEvaluator {
         return 1 - easeIn(outCurve, (1 - t) * 2) / 2
     }
 
+    /// The shape a keyframe segment takes: the classic in/out S-curve, so a
+    /// key eases out of the one behind it and into the one ahead.
+    static func eased(_ curve: EasingCurve, _ t: Double) -> Double {
+        combined(t, in: curve, out: curve)
+    }
+
     // MARK: - Per-frame motion state
 
     struct MotionState {

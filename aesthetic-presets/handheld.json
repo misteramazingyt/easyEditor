@@ -58,6 +58,5 @@
  "ringing_scale": 4,
  "snow_anisotropy": 0.5299999713897705,
  "luma_noise": true,
- "luma_noise_detail": 1,
- "_name": "Handheld"
+ "luma_noise_detail": 1
 }

@@ -58,6 +58,5 @@
  "chroma_phase_error": 0,
  "chroma_noise": false,
  "tracking_noise_height": 6,
- "vhs_chroma_loss": 0,
- "_name": "Low Band"
+ "vhs_chroma_loss": 0
 }

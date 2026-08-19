@@ -58,6 +58,5 @@
  "filter_type": 1,
  "use_field": 4,
  "chroma_demodulation": 1,
- "head_switching": true,
- "_name": "Game Show"
+ "head_switching": true
 }

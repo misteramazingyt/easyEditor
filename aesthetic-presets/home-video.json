@@ -58,6 +58,5 @@
  "head_switching": true,
  "tracking_noise": true,
  "vhs_edge_wave_detail": 2,
- "vhs_tape_speed": 2,
- "_name": "Home Video"
+ "vhs_tape_speed": 2
 }

@@ -76,20 +76,43 @@ enum AestheticLibrary {
         return presets.first { $0.id == id } ?? presets.first
     }
 
+    /// Names live in a side manifest rather than inside the presets.
+    ///
+    /// ntsc-rs's JSON lexer, at the revision we link, mis-parses *any* string
+    /// value in a preset: its value branch calls `str_ignore()` without first
+    /// consuming the opening quote, so the lexer desynchronises and the file is
+    /// rejected outright. A `_name` field in the preset therefore silently
+    /// costs you the whole preset — it falls back to the default effect, and
+    /// every look on the wheel comes out identical. Keep these files numeric.
     private static func load() -> [AestheticPreset] {
-        guard let urls = Bundle.main.urls(forResourcesWithExtension: "json",
-                                          subdirectory: nil) else { return [] }
+        guard let manifestURL = Bundle.main.url(forResource: "aesthetic-manifest",
+                                                withExtension: "json"),
+              let manifestData = try? Data(contentsOf: manifestURL),
+              let manifest = try? JSONDecoder().decode(Manifest.self, from: manifestData) else {
+            Log.engine.error("Aesthetic preset manifest missing or unreadable")
+            return []
+        }
         var found: [AestheticPreset] = []
-        for url in urls {
-            guard let data = try? Data(contentsOf: url),
-                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-                  // Our presets carry _name; other bundled JSON doesn't.
-                  let name = json["_name"] as? String else { continue }
-            let slug = url.deletingPathExtension().lastPathComponent
-            found.append(AestheticPreset(id: slug, name: name,
-                                         params: .from(presetJSON: json, name: name)))
+        for entry in manifest.presets {
+            guard let url = Bundle.main.url(forResource: entry.slug, withExtension: "json"),
+                  let data = try? Data(contentsOf: url),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else {
+                Log.engine.error("Aesthetic preset \(entry.slug) is not in the bundle")
+                continue
+            }
+            found.append(AestheticPreset(id: entry.slug, name: entry.name,
+                                         params: .from(presetJSON: json, name: entry.name)))
         }
         return found.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+    }
+
+    private struct Manifest: Decodable {
+        struct Entry: Decodable {
+            let slug: String
+            let name: String
+        }
+        let presets: [Entry]
     }
 }
 

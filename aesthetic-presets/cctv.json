@@ -58,6 +58,5 @@
  "chroma_noise_detail": 2,
  "vhs_sharpen_frequency": 1,
  "snow_intensity": 0.0035000001080334187,
- "bandwidth_scale": 0.30000001192092896,
- "_name": "CCTV"
+ "bandwidth_scale": 0.30000001192092896
 }

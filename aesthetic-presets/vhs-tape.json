@@ -58,6 +58,5 @@
  "head_switching_offset": 2,
  "head_switching_start_mid_line": false,
  "version": 1,
- "chroma_noise_detail": 1,
- "_name": "VHS Tape"
+ "chroma_noise_detail": 1
 }

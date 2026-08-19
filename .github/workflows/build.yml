@@ -52,6 +52,28 @@ jobs:
           cp target/aarch64-apple-ios/release/libntscbridge.a              "$GITHUB_WORKSPACE/rust/target/aarch64-apple-ios/release/" 2>/dev/null || true
           ls -lh "$GITHUB_WORKSPACE/rust/target/aarch64-apple-ios/release/"
 
+      # ntsc-rs's lexer mis-parses any string value in a preset and rejects the
+      # whole file, which shows up as every look rendering its default rather
+      # than as an error. Keep these numeric.
+      - name: Check the aesthetic presets are string-free
+        run: |
+          python3 - <<'PY'
+          import glob, json, sys
+          bad = []
+          for path in glob.glob("aesthetic-presets/*.json"):
+              if path.endswith("aesthetic-manifest.json"):
+                  continue
+              with open(path, encoding="utf-8") as fh:
+                  data = json.load(fh)
+              strings = [k for k, v in data.items() if isinstance(v, str)]
+              if strings:
+                  bad.append((path, strings))
+          for path, keys in bad:
+              print("::error::%s carries string values ntsc-rs will reject: %s"
+                    % (path, ", ".join(keys)))
+          sys.exit(1 if bad else 0)
+          PY
+
       - name: Generate Xcode project
         run: xcodegen generate
 

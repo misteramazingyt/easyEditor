@@ -58,6 +58,5 @@
  "composite_noise_intensity": 0.07999999821186066,
  "composite_noise_frequency": 0.07000000029802322,
  "tracking_noise_wave_intensity": 8,
- "vhs_chroma_loss": 0.0003499999875202775,
- "_name": "Weather Channel"
+ "vhs_chroma_loss": 0.0003499999875202775
 }

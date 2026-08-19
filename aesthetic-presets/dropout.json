@@ -58,6 +58,5 @@
  "vhs_chroma_loss": 2.499999936844688e-05,
  "head_switching_horizontal_shift": 72,
  "vhs_edge_wave": 0.5,
- "luma_smear": 0.5,
- "_name": "Dropout"
+ "luma_smear": 0.5
 }

@@ -58,6 +58,5 @@
  "chroma_noise_frequency": 0.5,
  "composite_noise_frequency": 1,
  "head_switching": true,
- "luma_noise": true,
- "_name": "Noise Floor"
+ "luma_noise": true
 }

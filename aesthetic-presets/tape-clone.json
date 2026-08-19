@@ -58,6 +58,5 @@
  "vhs_settings": true,
  "chroma_noise_frequency": 0.5,
  "head_switching": true,
- "chroma_noise": true,
- "_name": "Tape Clone"
+ "chroma_noise": true
 }

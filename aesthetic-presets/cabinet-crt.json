@@ -58,6 +58,5 @@
  "head_switching_offset": 3,
  "vhs_tape_speed": 3,
  "tracking_noise_snow_intensity": 0.02500000037252903,
- "ringing_power": 2.299999952316284,
- "_name": "Cabinet CRT"
+ "ringing_power": 2.299999952316284
 }

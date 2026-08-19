@@ -1,0 +1,104 @@
+{
+ "presets": [
+  {
+   "slug": "1980s-tv",
+   "name": "1980s TV"
+  },
+  {
+   "slug": "1990s-tv",
+   "name": "1990s TV"
+  },
+  {
+   "slug": "attic-tape",
+   "name": "Attic Tape"
+  },
+  {
+   "slug": "broadcast",
+   "name": "Broadcast"
+  },
+  {
+   "slug": "cabinet-crt",
+   "name": "Cabinet CRT"
+  },
+  {
+   "slug": "camcorder",
+   "name": "Camcorder"
+  },
+  {
+   "slug": "cctv",
+   "name": "CCTV"
+  },
+  {
+   "slug": "chewed-tape",
+   "name": "Chewed Tape"
+  },
+  {
+   "slug": "damaged-tape",
+   "name": "Damaged Tape"
+  },
+  {
+   "slug": "dropout",
+   "name": "Dropout"
+  },
+  {
+   "slug": "eighties",
+   "name": "Eighties"
+  },
+  {
+   "slug": "game-show",
+   "name": "Game Show"
+  },
+  {
+   "slug": "handheld",
+   "name": "Handheld"
+  },
+  {
+   "slug": "hd-broadcast",
+   "name": "HD Broadcast"
+  },
+  {
+   "slug": "home-video",
+   "name": "Home Video"
+  },
+  {
+   "slug": "low-band",
+   "name": "Low Band"
+  },
+  {
+   "slug": "noise-floor",
+   "name": "Noise Floor"
+  },
+  {
+   "slug": "old-vhs",
+   "name": "Old VHS"
+  },
+  {
+   "slug": "oversharp",
+   "name": "Oversharp"
+  },
+  {
+   "slug": "radioactive",
+   "name": "Radioactive"
+  },
+  {
+   "slug": "static",
+   "name": "Static"
+  },
+  {
+   "slug": "tape-clone",
+   "name": "Tape Clone"
+  },
+  {
+   "slug": "vhs-tape",
+   "name": "VHS Tape"
+  },
+  {
+   "slug": "weather-channel",
+   "name": "Weather Channel"
+  },
+  {
+   "slug": "worm",
+   "name": "Worm"
+  }
+ ]
+}

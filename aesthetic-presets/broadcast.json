@@ -58,6 +58,5 @@
  "chroma_phase_error": 0,
  "head_switching_mid_line_position": 0.949999988079071,
  "snow_anisotropy": 0.5,
- "vhs_settings": true,
- "_name": "Broadcast"
+ "vhs_settings": true
 }
