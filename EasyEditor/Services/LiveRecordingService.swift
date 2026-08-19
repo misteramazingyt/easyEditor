@@ -15,6 +15,21 @@ struct CameraFraming: Equatable {
     static let identity = CameraFraming()
 }
 
+/// Lets the capture queue read a flag the UI writes on the main thread.
+final class AtomicFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Bool
+
+    init(_ initial: Bool) { value = initial }
+
+    func store(_ newValue: Bool) { lock.lock(); value = newValue; lock.unlock() }
+
+    func current() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return value
+    }
+}
+
 /// Lets the capture queue read framing the UI writes on the main thread.
 final class CameraFramingBox: @unchecked Sendable {
     private let lock = NSLock()
@@ -70,9 +85,16 @@ final class LiveRecordingService: NSObject, ObservableObject,
         didSet { framingBox.store(framing) }
     }
 
+    /// Background removal on/off. Off records the whole frame, which is what
+    /// you want when the background is the shot.
+    @Published var isKeyingEnabled = true {
+        didSet { keyingFlag.store(isKeyingEnabled) }
+    }
+
     /// Latest keyed frame, for the on-screen overlay.
     let frames = LiveFrameBuffer()
     private let framingBox = CameraFramingBox()
+    private let keyingFlag = AtomicFlag(true)
 
     // MARK: Capture
 
@@ -366,7 +388,8 @@ final class LiveRecordingService: NSObject, ObservableObject,
         // project canvas over transparency — preview and file get the same image.
         let raw = CIImage(cvPixelBuffer: buffer)
         var keyed = raw
-        if let mask = CutoutService.personMask(buffer: buffer, scaledTo: raw.extent) {
+        if keyingFlag.current(),
+           let mask = CutoutService.personMask(buffer: buffer, scaledTo: raw.extent) {
             keyed = CutoutService.masked(raw, with: mask)
         }
         let canvas = CGRect(origin: .zero, size: renderSize)

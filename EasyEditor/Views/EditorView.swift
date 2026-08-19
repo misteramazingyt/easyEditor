@@ -30,6 +30,7 @@ struct EditorView: View {
     @State private var showURLCapture = false
     @State private var blinkOn = true
     @State private var isFramingCamera = false
+    @State private var showOutroMenu = false
 
     init(project: VideoProject) {
         // The save closure is wired to AppState in .onAppear via the
@@ -67,7 +68,7 @@ struct EditorView: View {
                     onText: { textSheetIsTitle = false; showTextSheet = true },
                     onCaptions: { editor.generateCaptions() },
                     onAutoBRoll: { showAutoBRoll = true },
-                    onOutro: { editor.appendOutro() })
+                    onOutro: { showOutroMenu = true })
             }
         }
         .background(Color(red: 0.05, green: 0.06, blue: 0.09).ignoresSafeArea())
@@ -141,6 +142,19 @@ struct EditorView: View {
                       selection: $pickedMedia,
                       maxSelectionCount: 20,
                       matching: .any(of: [.videos, .images]))
+        .confirmationDialog("Choose an outro", isPresented: $showOutroMenu,
+                            titleVisibility: .visible) {
+            ForEach(OutroStyle.allCases) { style in
+                Button {
+                    editor.appendOutro(style)
+                } label: {
+                    Label(style.title, systemImage: style.systemImage)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Laid over the end of the timeline, black blended out.")
+        }
         .confirmationDialog("Add media", isPresented: $showMediaMenu, titleVisibility: .visible) {
             Button {
                 showTimelinePicker = true
@@ -337,19 +351,41 @@ struct EditorView: View {
         return size.width / size.height
     }
 
-    /// Leave camera mode without recording (spec: mis-tapped the white circle).
+    /// Leave camera mode without recording, and switch background removal.
     @ViewBuilder
     private var armedCancelButton: some View {
-        if editor.recordingState == .armed {
-            Button {
-                editor.cancelArmedRecording()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(.black.opacity(0.45), in: Circle())
-                    .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+        if editor.recordingState != .idle {
+            HStack(spacing: 8) {
+                if editor.recordingState == .armed {
+                    Button {
+                        editor.cancelArmedRecording()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(.black.opacity(0.45), in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                    }
+                }
+                Button {
+                    editor.recorder.isKeyingEnabled.toggle()
+                    Haptics.selection()
+                } label: {
+                    // Dotted backdrop = the background is being removed;
+                    // the filled panel behind the figure = it's being kept.
+                    Image(systemName: editor.recorder.isKeyingEnabled
+                          ? "person.and.background.dotted"
+                          : "rectangle.inset.filled.and.person.filled")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(editor.recorder.isKeyingEnabled ? Color.blue : Color.white)
+                        .frame(width: 32, height: 32)
+                        .background(.black.opacity(0.45), in: Circle())
+                        .overlay(Circle().strokeBorder(
+                            editor.recorder.isKeyingEnabled
+                                ? Color.blue.opacity(0.8) : Color.white.opacity(0.25),
+                            lineWidth: 1))
+                }
             }
             .padding(12)
         }

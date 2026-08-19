@@ -405,8 +405,8 @@ final class EditorState: ObservableObject {
 
     // MARK: - Outro
 
-    func appendOutro() {
-        guard !project.primaryClips.isEmpty else {
+    func appendOutro(_ style: OutroStyle) {
+        guard !project.clips.isEmpty else {
             errorMessage = "Add a clip before appending the outro."
             return
         }
@@ -415,13 +415,13 @@ final class EditorState: ObservableObject {
         Task {
             defer { isProcessing = false }
             do {
-                let result = try await OutroBuilder.appendOutro(to: project)
+                let result = try await OutroBuilder.appendOutro(style, to: project)
                 pushUndo()
                 project = result.project
                 selectedClipID = nil
                 playback.scrub(to: result.jumpTo)
                 playback.endScrub()
-                showToast("Outro added")
+                showToast("\(style.title) outro added")
                 Haptics.success()
             } catch {
                 errorMessage = error.localizedDescription
