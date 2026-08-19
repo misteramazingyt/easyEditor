@@ -27,6 +27,15 @@ struct CompositeValue: Codable, Equatable {
     var blend: BlendMode = .normal
 }
 
+/// What the lozenge should say about this moment. Hoisted out of the track so
+/// both tracks report in the same currency, whatever they animate.
+enum KeyframeMarker: Equatable {
+    case off        // no keys at all
+    case onKey      // the playhead is sitting on one
+    case between    // the playhead is inside an animated span
+    case outside    // there are keys, but not around here
+}
+
 protocol KeyframeValue: Codable, Equatable {
     static func interpolate(_ from: Self, _ to: Self, _ t: Double) -> Self
 }
@@ -104,15 +113,7 @@ struct KeyframeTrack<Value: KeyframeValue>: Codable, Equatable {
         return keys.lastIndex { $0.time < time }
     }
 
-    /// What the lozenge should say about this moment.
-    enum Marker: Equatable {
-        case off        // no keys at all
-        case onKey      // the playhead is sitting on one
-        case between    // the playhead is inside an animated span
-        case outside    // there are keys, but not around here
-    }
-
-    func marker(at time: Double) -> Marker {
+    func marker(at time: Double) -> KeyframeMarker {
         guard let first = keys.first, let last = keys.last else { return .off }
         if index(at: time) != nil { return .onKey }
         if time > first.time && time < last.time { return .between }
@@ -143,5 +144,74 @@ struct KeyframeTrack<Value: KeyframeValue>: Codable, Equatable {
     mutating func setEasing(_ easing: EasingCurve, at time: Double) {
         guard let existing = governingIndex(at: time) else { return }
         keys[existing].easing = easing
+    }
+}
+
+// MARK: - Reading a clip's animation
+
+extension TimelineClip {
+
+    var usesPlacement: Bool { kind == .image || kind == .title }
+
+    /// Where this layer sits with nothing animating: its own transform if the
+    /// box has been used, otherwise whatever it naturally frames itself at —
+    /// an overlay's placement, or a plain aspect-fit for video.
+    var baseTransform: ClipTransform {
+        if let transform { return transform }
+        if usesPlacement, let placement {
+            return ClipTransform(centerX: placement.centerX,
+                                 centerY: placement.centerY,
+                                 scale: placement.widthFraction,
+                                 rotation: placement.rotationDegrees)
+        }
+        return ClipTransform(centerX: 0.5, centerY: 0.5,
+                             scale: usesPlacement ? 0.6 : 1,
+                             rotation: 0)
+    }
+
+    /// Move the layer. Placement is kept in step for overlays so anything
+    /// still reading it agrees with what the canvas is showing.
+    mutating func setBaseTransform(_ value: ClipTransform) {
+        transform = value
+        guard usesPlacement else { return }
+        var updated = placement ?? .image
+        updated.centerX = value.centerX
+        updated.centerY = value.centerY
+        updated.widthFraction = value.scale
+        updated.rotation = value.rotation
+        placement = updated
+    }
+
+    var baseComposite: CompositeValue {
+        CompositeValue(opacity: usesPlacement ? (placement?.opacity ?? 1) : effectiveOpacity,
+                       blend: blend ?? .normal)
+    }
+
+    mutating func setBaseComposite(_ value: CompositeValue) {
+        blend = value.blend == .normal ? nil : value.blend
+        if usesPlacement {
+            var updated = placement ?? .image
+            updated.opacity = value.opacity
+            placement = updated
+        } else {
+            opacity = value.opacity
+        }
+    }
+
+    /// Framing at a moment on the timeline. `clipStart` is where this clip
+    /// begins there; keys are timed from the clip's own start so trimming or
+    /// sliding it carries the animation along.
+    func transform(at timelineTime: Double, clipStart: Double) -> ClipTransform {
+        guard let motionKeys, motionKeys.isActive else { return baseTransform }
+        return motionKeys.value(at: timelineTime - clipStart) ?? baseTransform
+    }
+
+    func composite(at timelineTime: Double, clipStart: Double) -> CompositeValue {
+        guard let compositeKeys, compositeKeys.isActive else { return baseComposite }
+        return compositeKeys.value(at: timelineTime - clipStart) ?? baseComposite
+    }
+
+    var isAnimated: Bool {
+        (motionKeys?.isActive ?? false) || (compositeKeys?.isActive ?? false)
     }
 }

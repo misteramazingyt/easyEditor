@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Which tool sheet is open for the selected clip.
 enum ClipTool: String, Identifiable {
-    case speed, volume, filters, effects, adjust, retouch, mask, opacity, more
+    case speed, volume, filters, effects, adjust, retouch, mask, more
     case inOut, animate, composite, cutout
     var id: String { rawValue }
 }
@@ -55,10 +55,13 @@ struct SelectedClipToolbar: View {
             }
         }
 
-        // Motion tools — connected clips only, never the main track.
+        // Entrance/exit and looping stay off the main track; opacity, blend and
+        // their keyframes belong to every visual layer.
         if clip.lane != .primary && clip.isVisual {
             tile("In/Out", "arrow.down.right.and.arrow.up.left") { activeTool = .inOut }
             tile("Animate", "sparkles.rectangle.stack") { activeTool = .animate }
+        }
+        if clip.isVisual {
             tile("Composite", "square.3.layers.3d") { activeTool = .composite }
         }
         if clip.kind == .video || clip.kind == .image {
@@ -89,7 +92,6 @@ struct SelectedClipToolbar: View {
                 editor.mutate(clip.id) { $0.isFlippedH.toggle() }
                 editor.showToast(clip.isFlippedH ? "Unflipped" : "Flipped")
             }
-            tile("Opacity", "circle.righthalf.filled") { activeTool = .opacity }
             if clip.lane == .primary {
                 tile("Transition", "square.on.square.dashed") {
                     transitionAfterClipID = clip.id

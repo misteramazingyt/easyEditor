@@ -176,29 +176,70 @@ struct ClipInspectorView: View {
                 }
             }
 
-            if clip.kind == .image || clip.kind == .title {
-                Section("Position") {
-                    adjustmentSlider("Horizontal", value: Binding(
-                        get: { editor.selectedClip?.placement?.centerX ?? 0.5 },
-                        set: { v in editor.mutateLive(clip.id) { $0.placement?.centerX = v } }
-                    ), range: 0...1)
-                    adjustmentSlider("Vertical", value: Binding(
-                        get: { editor.selectedClip?.placement?.centerY ?? 0.5 },
-                        set: { v in editor.mutateLive(clip.id) { $0.placement?.centerY = v } }
-                    ), range: 0...1)
-                    adjustmentSlider("Scale", value: Binding(
-                        get: { editor.selectedClip?.placement?.widthFraction ?? 0.6 },
-                        set: { v in editor.mutateLive(clip.id) { $0.placement?.widthFraction = v } }
-                    ), range: 0.1...1)
-                    adjustmentSlider("Opacity", value: Binding(
-                        get: { editor.selectedClip?.placement?.opacity ?? 1 },
-                        set: { v in editor.mutateLive(clip.id) { $0.placement?.opacity = v } }
-                    ), range: 0.05...1)
-                }
+            if clip.isVisual {
+                transformSection(for: clip)
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color(red: 0.07, green: 0.08, blue: 0.12))
+    }
+
+    /// The same numbers the canvas box drives, on sliders — and the same
+    /// lozenge, so keying here and keying from the editing view are one act.
+    @ViewBuilder
+    private func transformSection(for clip: TimelineClip) -> some View {
+        let live = editor.liveTransform(of: clip)
+        Section {
+            transformSlider("Horizontal", value: live.centerX, range: -0.25...1.25) { value in
+                editor.updateTransform(clip.id, live: true) { $0.centerX = value }
+            }
+            transformSlider("Vertical", value: live.centerY, range: -0.25...1.25) { value in
+                editor.updateTransform(clip.id, live: true) { $0.centerY = value }
+            }
+            transformSlider("Scale", value: live.scale, range: 0.05...3) { value in
+                editor.updateTransform(clip.id, live: true) { $0.scale = value }
+            }
+            transformSlider("Rotation", value: live.rotation, range: -180...180,
+                            format: "%.0f°") { value in
+                editor.updateTransform(clip.id, live: true) { $0.rotation = value }
+            }
+            Button {
+                editor.updateTransform(clip.id) { $0 = ClipTransform() }
+            } label: {
+                Label("Reset framing", systemImage: "arrow.counterclockwise")
+            }
+        } header: {
+            HStack {
+                Text("Motion")
+                Spacer()
+                KeyframeLozenge(marker: editor.motionMarker(of: clip),
+                                easing: editor.motionEasing(of: clip),
+                                compact: true,
+                                onTap: { editor.toggleMotionKey(clip.id) },
+                                onEasing: { editor.setMotionEasing(clip.id, $0) })
+            }
+        } footer: {
+            if clip.motionKeys?.isActive == true {
+                Text("Keyed. Moving the playhead and changing anything here adds the next keyframe.")
+            }
+        }
+    }
+
+    private func transformSlider(_ label: String, value: Double,
+                                 range: ClosedRange<Double>,
+                                 format: String = "%.2f",
+                                 set: @escaping (Double) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(label).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Text(String(format: format, value))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(get: { value }, set: set), in: range) { editing in
+                if editing { editor.beginGesture() }
+            }
+        }
     }
 
     private func adjustmentSlider(_ label: String, value: Binding<Double>,

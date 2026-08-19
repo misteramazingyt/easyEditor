@@ -30,6 +30,12 @@ final class EditorState: ObservableObject {
     @Published private(set) var processingNote: String?
     /// Last composition build, for diagnosing a blank preview.
     @Published private(set) var buildSummary: String = "—"
+    /// Each visual clip's size on the canvas at its baseline framing, so the
+    /// transform box can draw around something the view never rasterised.
+    @Published private(set) var layerSizes: [UUID: CGSize] = [:]
+    /// Vertical zoom on the timeline: 1 is the compact stack, taller values
+    /// open enough room to read keyframes on the clips themselves.
+    @Published var rowScale: CGFloat = 1
     /// Non-nil while auto b-roll runs; shows staged progress.
     @Published private(set) var autoBRollStatus: String?
 
@@ -164,6 +170,7 @@ final class EditorState: ObservableObject {
                 guard !Task.isCancelled else { return }
                 self.playback.install(built)
                 self.buildSummary = built.summary
+                self.layerSizes = built.layerSizes
             } catch CompositionEngine.EngineError.noVideoContent {
                 guard !Task.isCancelled else { return }
                 self.playback.install(nil)
@@ -179,6 +186,9 @@ final class EditorState: ObservableObject {
     }
 
     // MARK: - Undo
+
+    /// Same as `pushUndo`, reachable from the keyframe extension next door.
+    func markUndoPoint() { pushUndo() }
 
     private func pushUndo() {
         undoStack.append(project)

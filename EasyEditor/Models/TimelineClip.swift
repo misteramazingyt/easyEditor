@@ -75,6 +75,17 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     /// How this clip composites over the layers beneath it.
     var blend: BlendMode?
 
+    /// Free transform from the canvas box: where the layer sits, how big it
+    /// is, and how far it is turned. Optional so saved projects decode; nil
+    /// means "however this clip naturally frames itself".
+    var transform: ClipTransform?
+
+    /// Animation. `motionKeys` drives position/scale/rotation as one track,
+    /// `compositeKeys` drives opacity and blend as another — which is how they
+    /// are read on the timeline, one dope-sheet row each.
+    var motionKeys: KeyframeTrack<ClipTransform>?
+    var compositeKeys: KeyframeTrack<CompositeValue>?
+
     /// Clips sharing a groupID select, move, and delete as one unit.
     var groupID: UUID?
 

@@ -497,6 +497,8 @@ struct CompositingSheet: View {
             PanelHeader(title: "Compositing")
             ScrollView {
                 VStack(spacing: 16) {
+                    blendingSection
+
                     VStack(spacing: 8) {
                         FieldLabel("Effects")
                         HStack(spacing: 10) {
@@ -549,6 +551,69 @@ struct CompositingSheet: View {
         .foregroundStyle(.white)
         .presentationDetents([.medium, .large])
         .presentationBackground(panelBackground)
+    }
+
+    /// How the layer meets what is under it. Opacity and blend animate as one
+    /// track, which is how they read on the timeline — one dope-sheet row.
+    @ViewBuilder
+    private var blendingSection: some View {
+        if let clip = editor.selectedClip {
+            let live = editor.liveComposite(of: clip)
+            let marker = editor.compositeMarker(of: clip)
+            VStack(spacing: 14) {
+                KeyedRow(title: "Opacity", marker: marker,
+                         easing: editor.compositeEasing(of: clip),
+                         onTap: { editor.toggleCompositeKey(clip.id) },
+                         onEasing: { editor.setCompositeEasing(clip.id, $0) }) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "circle.dotted").font(.caption)
+                        Slider(value: Binding(
+                            get: { live.opacity },
+                            set: { value in
+                                editor.updateComposite(clip.id, live: true) { $0.opacity = value }
+                            }
+                        ), in: 0.05...1) { editing in
+                            if editing { editor.beginGesture() }
+                        }
+                        Image(systemName: "circle.fill").font(.caption)
+                        Text("\(Int(live.opacity * 100))%")
+                            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            .frame(width: 38, alignment: .trailing)
+                    }
+                }
+
+                KeyedRow(title: "Blend", marker: marker,
+                         easing: editor.compositeEasing(of: clip),
+                         onTap: { editor.toggleCompositeKey(clip.id) },
+                         onEasing: { editor.setCompositeEasing(clip.id, $0) }) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(BlendMode.allCases) { mode in
+                                blendChip(mode, isOn: live.blend == mode, clip: clip)
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                }
+            }
+            .padding(14)
+            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private func blendChip(_ mode: BlendMode, isOn: Bool, clip: TimelineClip) -> some View {
+        Button {
+            editor.updateComposite(clip.id) { $0.blend = mode }
+            Haptics.selection()
+        } label: {
+            Text(mode.rawValue.capitalized)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(isOn ? Color.blue.opacity(0.35) : .white.opacity(0.07), in: Capsule())
+                .overlay(Capsule().strokeBorder(isOn ? Color.blue : .clear, lineWidth: 1.2))
+                .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
     }
 
     private func binding(_ keyPath: WritableKeyPath<CompositingSettings, Double>) -> Binding<Double> {

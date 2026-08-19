@@ -34,6 +34,11 @@ struct CompositorLayer {
     /// It is scaffolding, not picture.
     var isScaffold = false
 
+    /// Free framing from the canvas box, and the keys animating it.
+    var baseTransform = ClipTransform()
+    var motionKeys: KeyframeTrack<ClipTransform>?
+    var compositeKeys: KeyframeTrack<CompositeValue>?
+
     // Connected-clip motion (zero clipEnd = no motion evaluation).
     var clipStart: Double = 0
     var clipEnd: Double = 0
@@ -60,6 +65,28 @@ struct CompositorOverlay {
     /// Timeline stacking slot, shared scale with CompositorLayer.
     var zOrder: Int = 0
     var castsCaustics: Bool = true
+
+    /// Free framing from the canvas box, and the keys animating it. The
+    /// placement above stays the baseline these are measured against.
+    var baseTransform = ClipTransform()
+    var motionKeys: KeyframeTrack<ClipTransform>?
+    var compositeKeys: KeyframeTrack<CompositeValue>?
+}
+
+/// Resolve an animated value for this instant, falling back to the baseline
+/// when a layer has no keys.
+enum KeyframeResolver {
+    static func transform(_ base: ClipTransform, _ keys: KeyframeTrack<ClipTransform>?,
+                          at time: Double, clipStart: Double) -> ClipTransform {
+        guard let keys, keys.isActive else { return base }
+        return keys.value(at: time - clipStart) ?? base
+    }
+
+    static func composite(_ base: CompositeValue, _ keys: KeyframeTrack<CompositeValue>?,
+                          at time: Double, clipStart: Double) -> CompositeValue {
+        guard let keys, keys.isActive else { return base }
+        return keys.value(at: time - clipStart) ?? base
+    }
 }
 
 final class CompositorInstruction: NSObject, AVVideoCompositionInstructionProtocol {
@@ -206,6 +233,26 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                     y: (size.height - extent.height * scale) / 2))
             image = image.transformed(by: fitted)
 
+            // 3b. Free framing from the canvas box, animated if it has keys.
+            //     Applied about the fitted picture's own centre, so scale 1 at
+            //     centre (0.5, 0.5) is exactly the fit above and an untouched
+            //     clip goes through here unchanged.
+            let now = request.compositionTime.seconds
+            let placed = KeyframeResolver.transform(layer.baseTransform, layer.motionKeys,
+                                                    at: now, clipStart: layer.clipStart)
+            if !placed.isIdentity {
+                let box = image.extent
+                var t = CGAffineTransform(translationX: -box.midX, y: -box.midY)
+                t = t.concatenating(CGAffineTransform(scaleX: CGFloat(placed.scale),
+                                                      y: CGFloat(placed.scale)))
+                t = t.concatenating(CGAffineTransform(
+                    rotationAngle: -CGFloat(placed.rotation) * .pi / 180))
+                t = t.concatenating(CGAffineTransform(
+                    translationX: size.width * CGFloat(placed.centerX),
+                    y: size.height * (1 - CGFloat(placed.centerY))))
+                image = image.transformed(by: t)
+            }
+
             // 4. Per-clip filter + adjustments.
             image = Self.applyFilter(layer.filter, to: image)
             if !layer.adjustments.isIdentity {
@@ -294,8 +341,13 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 image = image.transformed(by: t)
             }
 
-            // 6. Opacity ramp (premultiplied fade).
-            let opacity = layer.startOpacity + (layer.endOpacity - layer.startOpacity) * progress
+            // 6. Opacity ramp (premultiplied fade), times whatever the
+            //    compositing track is asking for at this instant.
+            let mixed = KeyframeResolver.composite(
+                CompositeValue(opacity: 1, blend: layer.blend ?? .normal),
+                layer.compositeKeys, at: now, clipStart: layer.clipStart)
+            let opacity = (layer.startOpacity
+                           + (layer.endOpacity - layer.startOpacity) * progress) * mixed.opacity
             if opacity < 0.999 {
                 let a = CGFloat(max(0, opacity))
                 image = image.applyingFilter("CIColorMatrix", parameters: [
@@ -307,7 +359,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             }
 
             pending.append(Pending(z: layer.zOrder, seq: pending.count,
-                                   image: image, blend: layer.blend,
+                                   image: image, blend: mixed.blend,
                                    castsCaustics: layer.castsCaustics))
         }
 
@@ -328,12 +380,17 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                                                canvas: size)
             }
 
-            let targetWidth = size.width * CGFloat(overlay.placement.widthFraction)
+            // Where the box put it, animated if it has keys — the entrance,
+            // exit and loop motion above then rides on top of that.
+            let now = request.compositionTime.seconds
+            let placed = KeyframeResolver.transform(overlay.baseTransform, overlay.motionKeys,
+                                                    at: now, clipStart: overlay.clipStart)
+            let targetWidth = size.width * CGFloat(placed.scale)
             let scale = targetWidth / extent.width
-            let centerX = size.width * CGFloat(overlay.placement.centerX) + motion.offset.x
-            let centerY = size.height * (1 - CGFloat(overlay.placement.centerY)) - motion.offset.y
+            let centerX = size.width * CGFloat(placed.centerX) + motion.offset.x
+            let centerY = size.height * (1 - CGFloat(placed.centerY)) - motion.offset.y
             var t = CGAffineTransform(translationX: centerX, y: centerY)
-            t = t.rotated(by: -motion.rotation)
+            t = t.rotated(by: -motion.rotation - CGFloat(placed.rotation) * .pi / 180)
             t = t.scaledBy(x: scale * motion.scaleX, y: scale * motion.scaleY)
             t = t.translatedBy(x: -extent.midX, y: -extent.midY)
             image = image.transformed(by: t)
@@ -352,8 +409,12 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             if let compositing = overlay.compositing, compositing.effect != .none {
                 image = Self.applyCompositing(compositing, to: image, canvas: canvas)
             }
-            if overlay.placement.opacity < 0.999 {
-                let a = CGFloat(max(0, overlay.placement.opacity))
+            let mixed = KeyframeResolver.composite(
+                CompositeValue(opacity: overlay.placement.opacity,
+                               blend: overlay.blend ?? .normal),
+                overlay.compositeKeys, at: now, clipStart: overlay.clipStart)
+            if mixed.opacity < 0.999 {
+                let a = CGFloat(max(0, mixed.opacity))
                 image = image.applyingFilter("CIColorMatrix", parameters: [
                     "inputRVector": CIVector(x: a, y: 0, z: 0, w: 0),
                     "inputGVector": CIVector(x: 0, y: a, z: 0, w: 0),
@@ -362,7 +423,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 ])
             }
             pending.append(Pending(z: overlay.zOrder, seq: pending.count,
-                                   image: image, blend: overlay.blend,
+                                   image: image, blend: mixed.blend,
                                    castsCaustics: overlay.castsCaustics))
         }
 

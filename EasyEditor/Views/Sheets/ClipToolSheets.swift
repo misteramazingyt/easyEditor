@@ -288,31 +288,3 @@ struct AdjustSheet: View {
             })
     }
 }
-
-// MARK: - Opacity
-
-struct OpacitySheet: View {
-    @EnvironmentObject private var editor: EditorState
-
-    var body: some View {
-        ToolSheetChrome(title: "Opacity", onReset: {
-            if let id = editor.selectedClipID { editor.mutate(id) { $0.opacity = nil } }
-        }) {
-            HStack {
-                Image(systemName: "circle.dotted")
-                Slider(value: Binding(
-                    get: { editor.selectedClip?.effectiveOpacity ?? 1 },
-                    set: { v in
-                        if let id = editor.selectedClipID {
-                            editor.mutateLive(id) { $0.opacity = v }
-                        }
-                    }
-                ), in: 0.05...1) { editing in
-                    if editing { editor.beginGesture() }
-                }
-                Image(systemName: "circle.fill")
-            }
-            .padding(.horizontal, 20)
-        }
-    }
-}

@@ -137,7 +137,6 @@ struct EditorView: View {
                 case .adjust: AdjustSheet()
                 case .retouch: RetouchSheet()
                 case .mask: MaskSheet()
-                case .opacity: OpacitySheet()
                 case .inOut: InOutSheet()
                 case .animate: AnimationSheet()
                 case .composite: CompositingSheet()
@@ -321,7 +320,6 @@ struct EditorView: View {
         ZStack {
             if editor.playback.hasContent {
                 PreviewPlayerView(player: editor.playback.player)
-                    .onTapGesture { editor.togglePlayback() }
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "film.stack")
@@ -331,6 +329,13 @@ struct EditorView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // Photoshop-style handling: the canvas is the layer stack, not a
+            // play button. Suppressed while the camera is up, where the
+            // framing box belongs to the recorder instead.
+            if editor.recordingState == .idle {
+                CanvasTransformOverlay().environmentObject(editor)
+            }
+
             // Keyed camera, composited over whatever the layers are showing.
             // Tap it for a bounding box to move and resize yourself.
             if editor.recordingState != .idle {
@@ -469,69 +474,111 @@ struct EditorView: View {
     // MARK: - Transport
 
     private var transportBar: some View {
-        HStack {
-            HStack(spacing: 18) {
-                Button {
-                    if editor.selectedClipID != nil {
-                        showInspector = true
-                    } else {
-                        Haptics.warning()
-                    }
-                } label: {
-                    Image(systemName: "slider.horizontal.3").font(.title3)
-                }
-                Button {
-                    editor.toggleOriginalAudio()
-                } label: {
-                    Image(systemName: editor.originalAudioEnabled
-                          ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                        .font(.title3)
-                }
-                .disabled(editor.project.primaryClips.isEmpty)
-                Button {
-                    editor.splitAllAtPlayhead()
-                } label: {
-                    Image(systemName: "scissors").font(.title3)
-                }
-                .disabled(editor.project.clips.isEmpty)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(spacing: 10) {
+            playRow
+            toolRow
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 22)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .background(Color(red: 0.03, green: 0.04, blue: 0.06))
+        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
+            if editor.recordingState == .recording { blinkOn.toggle() } else { blinkOn = true }
+        }
+    }
 
-            HStack(spacing: 20) {
-                Button {
-                    editor.togglePlayback()
-                } label: {
-                    Image(systemName: editor.playback.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title)
-                }
-                recordButton
-                if editor.recordingState == .recording || editor.recordingState == .paused {
-                    Button {
-                        editor.stopRecording()
-                    } label: {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(.red)
-                            .frame(width: 21, height: 21)
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
+    /// Transport on its own line, so the tools below never compete with it.
+    private var playRow: some View {
+        HStack(spacing: 20) {
+            Spacer(minLength: 0)
+            Button {
+                editor.togglePlayback()
+            } label: {
+                Image(systemName: editor.playback.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.title)
             }
-            .animation(.snappy(duration: 0.2), value: editor.recordingState)
-
+            recordButton
+            if editor.recordingState == .recording || editor.recordingState == .paused {
+                Button {
+                    editor.stopRecording()
+                } label: {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(.red)
+                        .frame(width: 21, height: 21)
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+            Spacer(minLength: 0)
+        }
+        .overlay(alignment: .trailing) {
             Button {
                 showFullscreen = true
             } label: {
                 Image(systemName: "arrow.up.left.and.arrow.down.right").font(.title3)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 22)
-        .padding(.vertical, 8)
-        .background(Color(red: 0.03, green: 0.04, blue: 0.06))
-        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { _ in
-            if editor.recordingState == .recording { blinkOn.toggle() } else { blinkOn = true }
+        .animation(.snappy(duration: 0.2), value: editor.recordingState)
+    }
+
+    /// Everything that acts on the selected layer.
+    private var toolRow: some View {
+        let selected = editor.selectedClip
+        return HStack(spacing: 0) {
+            transportTool("slider.horizontal.3", enabled: selected != nil) {
+                if selected != nil { showInspector = true } else { Haptics.warning() }
+            }
+            transportTool(editor.originalAudioEnabled
+                          ? "speaker.wave.2.fill" : "speaker.slash.fill",
+                          enabled: !editor.project.primaryClips.isEmpty) {
+                editor.toggleOriginalAudio()
+            }
+            transportTool("scissors", enabled: !editor.project.clips.isEmpty) {
+                editor.splitAllAtPlayhead()
+            }
+            transportTool("trash", enabled: selected != nil, tint: .red) {
+                if let id = selected?.id {
+                    editor.deleteClip(id)
+                    Haptics.warning()
+                }
+            }
+            keyframeTool(for: selected)
         }
+    }
+
+    private func transportTool(_ systemImage: String, enabled: Bool,
+                               tint: Color = .white,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.title3)
+                .foregroundStyle(tint)
+                .frame(maxWidth: .infinity)
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.3)
+    }
+
+    /// The motion lozenge, mirroring the one in the sheets: tap to key
+    /// position, scale and rotation at the playhead; hold for its easing.
+    @ViewBuilder
+    private func keyframeTool(for clip: TimelineClip?) -> some View {
+        let enabled = clip?.isVisual == true
+        KeyframeLozenge(marker: clip.map { editor.motionMarker(of: $0) } ?? .off,
+                        easing: clip.map { editor.motionEasing(of: $0) } ?? .sine,
+                        onTap: {
+                            guard let clip, clip.isVisual else {
+                                Haptics.warning()
+                                return
+                            }
+                            editor.toggleMotionKey(clip.id)
+                        },
+                        onEasing: { curve in
+                            if let clip { editor.setMotionEasing(clip.id, curve) }
+                        })
+            .frame(maxWidth: .infinity)
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.3)
     }
 }
 

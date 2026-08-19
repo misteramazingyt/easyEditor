@@ -11,6 +11,10 @@ struct BuiltComposition {
     /// What the build actually contains — surfaced in the UI so a blank
     /// preview can be diagnosed without a debugger.
     var summary: String = ""
+    /// Each visual clip's size on the canvas at its baseline framing, in render
+    /// coordinates. The transform box needs this to draw a box round something
+    /// it never rasterised itself.
+    var layerSizes: [UUID: CGSize] = [:]
 }
 
 /// Translates a `VideoProject` into an AVMutableComposition plus custom
@@ -32,6 +36,9 @@ struct CompositionEngine {
         let start: Double
         let end: Double
         let isBroll: Bool
+        /// Source size after the orientation fix, so the canvas box can work
+        /// out the aspect-fit without loading the asset again.
+        var naturalSize: CGSize = .zero
     }
 
     /// Build the playable/exportable graph. `overlayImages` maps image/title
@@ -126,7 +133,9 @@ struct CompositionEngine {
             placed.append(PlacedVideo(clip: clip, trackID: videoTrack.trackID,
                                       orientation: orientation,
                                       start: start, end: start + clip.effectiveDuration,
-                                      isBroll: false))
+                                      isBroll: false,
+                                      naturalSize: await Self.orientedSize(of: sourceVideo,
+                                                                          orientation: orientation)))
         }
         // No storyline video? Lay a black canvas track under everything so the
         // composition has both a surface and a duration.
@@ -181,7 +190,9 @@ struct CompositionEngine {
             placed.append(PlacedVideo(clip: clip, trackID: videoTrack.trackID,
                                       orientation: orientation,
                                       start: clip.offset, end: clip.offset + clip.effectiveDuration,
-                                      isBroll: true))
+                                      isBroll: true,
+                                      naturalSize: await Self.orientedSize(of: sourceVideo,
+                                                                          orientation: orientation)))
         }
 
         // MARK: Music / voiceover / SFX
@@ -239,11 +250,38 @@ struct CompositionEngine {
         let summary = "\(String(format: "%.1f", composition.duration.seconds))s · "
             + "\(placed.count) video · \(stills) still · \(instructionCount) steps"
             + (fillerTrackID != nil ? " · filler" : "")
+        var layerSizes: [UUID: CGSize] = [:]
+        for entry in placed where entry.naturalSize.width > 0 {
+            // On-canvas size at the baseline framing: the aspect fit the
+            // compositor does before any transform is applied.
+            let fit = min(renderSize.width / entry.naturalSize.width,
+                          renderSize.height / entry.naturalSize.height)
+            layerSizes[entry.clip.id] = CGSize(width: entry.naturalSize.width * fit,
+                                               height: entry.naturalSize.height * fit)
+        }
+        for clip in overlayClips {
+            guard let extent = overlayImages[clip.id]?.extent, extent.width > 0 else { continue }
+            // Stills are sized by their placement's width fraction.
+            let width = renderSize.width * clip.baseTransform.scale
+            layerSizes[clip.id] = CGSize(width: width,
+                                         height: width * extent.height / extent.width)
+        }
+
         return BuiltComposition(composition: composition,
                                 videoComposition: videoComposition,
                                 audioMix: audioMix,
                                 duration: composition.duration.seconds,
-                                summary: summary)
+                                summary: summary,
+                                layerSizes: layerSizes)
+    }
+
+    /// Source size with the track's rotation taken into account — a portrait
+    /// clip shot sideways measures portrait here.
+    private static func orientedSize(of track: AVAssetTrack,
+                                     orientation: CGAffineTransform) async -> CGSize {
+        guard let natural = try? await track.load(.naturalSize) else { return .zero }
+        let turned = abs(orientation.b) == 1 && abs(orientation.c) == 1
+        return turned ? CGSize(width: natural.height, height: natural.width) : natural
     }
 
     /// Pre-render every image/title clip once; the compositor stamps these per frame.
@@ -510,7 +548,10 @@ struct CompositionEngine {
                                                       loop: clip.loopFx,
                                                       compositing: clip.compositing,
                                                       blend: clip.blend,
-                                                      zOrder: clip.stackIndex))
+                                                      zOrder: clip.stackIndex,
+                                                      baseTransform: clip.baseTransform,
+                                                      motionKeys: clip.motionKeys,
+                                                      compositeKeys: clip.compositeKeys))
                 }
             }
 
@@ -558,6 +599,13 @@ struct CompositionEngine {
         layer.startOpacity = clip.effectiveOpacity
         layer.endOpacity = clip.effectiveOpacity
         layer.isScaffold = clip.isPlaceholder == true
+        layer.baseTransform = clip.baseTransform
+        layer.motionKeys = clip.motionKeys
+        layer.compositeKeys = clip.compositeKeys
+        // Keys are timed from the clip's own start, so every layer needs to
+        // know where it begins — not just the connected ones with in/out.
+        layer.clipStart = placedClip.start
+        layer.clipEnd = placedClip.end
         guard role != .solo, regionEnd > regionStart else { return layer }
 
         // Normalized transition progress at this instruction's endpoints.

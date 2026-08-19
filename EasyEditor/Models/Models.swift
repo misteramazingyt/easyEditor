@@ -278,6 +278,10 @@ struct OverlayPlacement: Codable, Equatable {
     var centerY: Double = 0.5
     var widthFraction: Double = 0.8    // overlay width as a fraction of canvas width
     var opacity: Double = 1
+    /// Free rotation from the transform box, clockwise on screen. Optional so
+    /// projects saved before the box existed still decode.
+    var rotation: Double?
+    var rotationDegrees: Double { rotation ?? 0 }
 
     static let title = OverlayPlacement(centerX: 0.5, centerY: 0.4, widthFraction: 0.9)
     static let caption = OverlayPlacement(centerX: 0.5, centerY: 0.82, widthFraction: 0.9)

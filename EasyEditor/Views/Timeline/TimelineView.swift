@@ -19,11 +19,19 @@ struct TimelineView: View {
 
     // MARK: Metrics
 
-    private let primaryHeight: CGFloat = 56
+    private let basePrimaryHeight: CGFloat = 56
     private let rowGap: CGFloat = 3
     private let rulerHeight: CGFloat = 18
     /// Fixed rows-viewport height: stacks taller than this scroll vertically.
     private let viewportRowsHeight: CGFloat = 172
+
+    /// Storyline row height at the current vertical zoom. Pinching up the
+    /// stack is what opens room for the dope sheets.
+    private var primaryHeight: CGFloat { basePrimaryHeight * editor.rowScale }
+
+    /// A clip has to be at least this tall before keyframes will fit legibly
+    /// on it rather than turning into a smear.
+    private var showsKeyframes: Bool { primaryHeight >= 104 }
 
     private struct Row: Identifiable {
         let index: Int      // stacking slot; 0 = storyline
@@ -38,8 +46,8 @@ struct TimelineView: View {
         case .video: return clip.lane == .primary ? primaryHeight : primaryHeight / 2
         case .image: return primaryHeight / 3
         case .title: return primaryHeight / 5
-        case .voiceover, .sfx: return 20
-        case .music: return 24
+        case .voiceover, .sfx: return 20 * editor.rowScale
+        case .music: return 24 * editor.rowScale
         }
     }
 
@@ -65,7 +73,7 @@ struct TimelineView: View {
     private func rowHeight(_ index: Int) -> CGFloat {
         if index == 0 { return primaryHeight }
         let occupants = editor.project.clips(stackedAt: index)
-        let emptyTarget: CGFloat = index > 0 ? primaryHeight / 3 : 22
+        let emptyTarget: CGFloat = index > 0 ? primaryHeight / 3 : 22 * editor.rowScale
         return max(occupants.map(chipHeight).max() ?? 0, emptyTarget)
     }
 
@@ -94,6 +102,7 @@ struct TimelineView: View {
 
     @State private var panStart: (time: Double, anchor: CGFloat)?
     @State private var zoomStartScale: CGFloat?
+    @State private var zoomStartRows: CGFloat?
     /// Distance from the viewport top to the storyline row's top — keeps the
     /// storyline visually stable as stacks grow. Negative = scrolled up.
     @State private var anchorFromTop: CGFloat = 40
@@ -163,7 +172,7 @@ struct TimelineView: View {
             .frame(width: geo.size.width, height: totalHeight, alignment: .topLeading)
             .contentShape(Rectangle())
             .gesture(panGesture(pps: pps, maxScroll: maxScroll, primaryTop: primaryTop, viewportRows: viewportRows))
-            .simultaneousGesture(zoomGesture)
+            .overlay(pinch)
         }
         .frame(height: totalHeight)
         .background(Color.black)
@@ -221,6 +230,9 @@ struct TimelineView: View {
                      onTrim: { edge, delta, ended in
                          handleTrim(clip: clip, edge: edge, deltaPoints: delta, pps: pps, ended: ended)
                      })
+            .overlay(alignment: .topLeading) {
+                dopeSheets(for: clip, height: height, pps: pps)
+            }
             .contentShape(Rectangle().inset(by: height < 26 ? -9 : 0))
             .offset(x: CGFloat(start) * pps, y: restingY)
             .offset(x: isDragging ? dragTranslation.width
@@ -240,6 +252,53 @@ struct TimelineView: View {
             }
             .gesture(moveGesture(clip: clip, rows: rows, pps: pps))
             .animation(.snappy(duration: 0.2), value: editor.project.clips)
+    }
+
+    // MARK: - Keyframes on the clip
+
+    /// The selected layer's animation, read straight off the clip: one row for
+    /// Motion and one for Compositing, each named at the clip's own start so
+    /// you can tell them apart once you have pinched the stack open far enough
+    /// for them to appear.
+    @ViewBuilder
+    private func dopeSheets(for clip: TimelineClip, height: CGFloat, pps: CGFloat) -> some View {
+        if editor.selectedClipID == clip.id, height >= 40, clip.isVisual {
+            let local = editor.localTime(of: clip)
+            VStack(alignment: .leading, spacing: 3) {
+                dopeRow("Motion",
+                        times: clip.motionKeys?.keys.map(\.time) ?? [],
+                        local: local, pps: pps)
+                dopeRow("Compositing",
+                        times: clip.compositeKeys?.keys.map(\.time) ?? [],
+                        local: local, pps: pps)
+            }
+            .padding(.top, 4)
+            .padding(.leading, 5)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func dopeRow(_ title: String, times: [Double],
+                         local: Double, pps: CGFloat) -> some View {
+        let snap = KeyframeTrack<ClipTransform>.snap
+        let inside = times.count > 1 && local > (times.first ?? 0) && local < (times.last ?? 0)
+        return ZStack(alignment: .topLeading) {
+            Text(title)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(times.isEmpty ? .white.opacity(0.35) : .white.opacity(0.8))
+                .padding(.horizontal, 4).padding(.vertical, 1)
+                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 3))
+            ForEach(Array(times.enumerated()), id: \.offset) { _, time in
+                let onKey = abs(time - local) <= snap
+                Diamond()
+                    .fill(onKey ? Color(red: 0.20, green: 0.85, blue: 0.80)
+                          : (inside ? Color(red: 1.0, green: 0.72, blue: 0.42) : .white))
+                    .frame(width: 9, height: 9)
+                    .overlay(Diamond().stroke(.black.opacity(0.5), lineWidth: 0.5))
+                    .offset(x: CGFloat(time) * pps - 4.5, y: 1)
+            }
+        }
+        .frame(height: 12, alignment: .topLeading)
     }
 
     // MARK: - Storyline decorations
@@ -311,13 +370,23 @@ struct TimelineView: View {
             }
     }
 
-    private var zoomGesture: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
+    /// Across zooms time; down opens the layers up. One gesture, two meanings,
+    /// decided by which way the fingers were further apart when it started.
+    private var pinch: some View {
+        AxisPinch(onChange: { scale, axis in
+            switch axis {
+            case .horizontal:
                 if zoomStartScale == nil { zoomStartScale = editor.pixelsPerSecond }
-                editor.pixelsPerSecond = min(300, max(10, (zoomStartScale ?? 60) * value))
+                editor.pixelsPerSecond = min(300, max(10, (zoomStartScale ?? 60) * scale))
+            case .vertical:
+                if zoomStartRows == nil { zoomStartRows = editor.rowScale }
+                editor.rowScale = min(4, max(1, (zoomStartRows ?? 1) * scale))
             }
-            .onEnded { _ in zoomStartScale = nil }
+        }, onEnd: {
+            zoomStartScale = nil
+            zoomStartRows = nil
+        })
+        .allowsHitTesting(false)
     }
 
     // MARK: - Clip move (magnetic, unlimited stacking, lane-crossing haptics)
