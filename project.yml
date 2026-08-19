@@ -10,6 +10,10 @@ settings:
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.9"
+    # Compile .metal as Core Image kernels (see Apple: Build Metal-based
+    # Core Image kernels with Xcode).
+    OTHER_METAL_FLAGS: "-fcikernel"
+    MTLLINKER_FLAGS: "-cikernel"
     DEVELOPMENT_TEAM: "" # <-- set your Apple Developer Team ID in Xcode
 
 targets:

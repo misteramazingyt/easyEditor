@@ -217,9 +217,28 @@ enum AestheticRenderer {
         guard s > 0.01, !input.extent.isEmpty else { return input }
         var image = input
 
+        // The Metal kernel handles everything that needs per-line geometry —
+        // curvature, wobble, tear — which a filter chain simply cannot do.
+        let modeIndex: Int
+        switch config.mode {
+        case .crt: modeIndex = 0
+        case .vhs: modeIndex = 1
+        case .ntsc: modeIndex = 2
+        case .none: modeIndex = -1
+        }
+        var kernelHandled = false
+        if modeIndex >= 0,
+           let shaded = AestheticKernel.shared.apply(to: image, canvas: canvas,
+                                                     mode: modeIndex, strength: s,
+                                                     time: time, params: p),
+           !shaded.extent.isEmpty {
+            image = shaded.cropped(to: canvas)
+            kernelHandled = true
+        }
+
         // Chroma separation: red and blue pull apart along the line.
         let bleed = CGFloat(p.chromaBleed * s * 5)
-        if bleed > 0.5 {
+        if !kernelHandled, bleed > 0.5 {
             image = step(image) { source in
                 let red = channel(source, r: 1, g: 0, b: 0)
                     .transformed(by: CGAffineTransform(translationX: -bleed, y: 0))
@@ -246,7 +265,7 @@ enum AestheticRenderer {
 
         // Tape wobble: the frame breathes sideways.
         let wobble = CGFloat(p.wobble * s) * canvas.width * 0.012
-        if wobble > 0.3 {
+        if !kernelHandled, wobble > 0.3 {
             let shift = wobble * CGFloat(sin(time * p.wobbleSpeed)
                                          + 0.4 * sin(time * p.wobbleSpeed * 2.7))
             image = step(image) {
@@ -257,7 +276,7 @@ enum AestheticRenderer {
         }
 
         // Head-switch tear: the bottom band slips out of line.
-        if p.tear * s > 0.06 {
+        if !kernelHandled, p.tear * s > 0.06 {
             let bandHeight = canvas.height * CGFloat(0.02 + 0.05 * p.tear)
             let band = CGRect(x: canvas.minX, y: canvas.minY,
                               width: canvas.width, height: bandHeight)
@@ -272,7 +291,7 @@ enum AestheticRenderer {
         }
 
         // Scanlines.
-        if p.scanline * s > 0.03 {
+        if !kernelHandled, p.scanline * s > 0.03 {
             let lineHeight = max(1.5, canvas.height / 480)
             let dark = CGFloat(1 - min(0.6, p.scanline * s * 0.7))
             if let stripes = generate("CIStripesGenerator", [
@@ -294,7 +313,7 @@ enum AestheticRenderer {
 
         // Grain and snow, drifting frame to frame.
         let noiseAmount = (p.grain * 0.5 + p.snow) * s
-        if noiseAmount > 0.02,
+        if !kernelHandled, noiseAmount > 0.02,
            let random = generate("CIRandomGenerator", [:]) {
             let jitterX = CGFloat((time * 137).truncatingRemainder(dividingBy: 512))
             let jitterY = CGFloat((time * 271).truncatingRemainder(dividingBy: 512))
@@ -317,7 +336,7 @@ enum AestheticRenderer {
             // Aperture grille: fine vertical mask under the scanlines.
             let cell = max(2.0, canvas.width / 420)
             let dim = CGFloat(1 - min(0.35, 0.4 * s))
-            if let grille = generate("CIStripesGenerator", [
+            if !kernelHandled, let grille = generate("CIStripesGenerator", [
                 kCIInputCenterKey: CIVector(x: 0, y: 0),
                 "inputColor0": CIColor(red: 1, green: 1, blue: 1),
                 "inputColor1": CIColor(red: dim, green: dim, blue: dim),
