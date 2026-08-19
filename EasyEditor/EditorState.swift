@@ -26,6 +26,8 @@ final class EditorState: ObservableObject {
     @Published private(set) var toast: String?
     @Published private(set) var isGeneratingCaptions = false
     @Published private(set) var isProcessing = false
+    /// What the processing overlay should say, when it isn't a clip edit.
+    @Published private(set) var processingNote: String?
     /// Non-nil while auto b-roll runs; shows staged progress.
     @Published private(set) var autoBRollStatus: String?
 
@@ -412,8 +414,12 @@ final class EditorState: ObservableObject {
         }
         guard !isProcessing else { return }
         isProcessing = true
+        processingNote = "Fetching the \(style.title.lowercased()) outro…"
         Task {
-            defer { isProcessing = false }
+            defer {
+                isProcessing = false
+                processingNote = nil
+            }
             do {
                 let result = try await OutroBuilder.appendOutro(style, to: project)
                 pushUndo()

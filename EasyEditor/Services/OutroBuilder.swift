@@ -4,6 +4,10 @@ import AVFoundation
 /// The house outros. Each is a single portrait animation on black, laid over
 /// the end of the timeline with a screen blend — black screens to nothing, so
 /// the animation floats over the footage with no keying and no matte.
+///
+/// The media lives on the web rather than in the app bundle, so the build
+/// stays small and a re-cut outro reaches every install without shipping a new
+/// IPA. It's fetched into the project the first time you insert it.
 enum OutroStyle: String, CaseIterable, Identifiable {
     case exciting, mystical
 
@@ -30,26 +34,30 @@ enum OutroStyle: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Bundled resource, and the name it takes inside a project's media dir.
-    var resource: String {
+    var remoteURL: URL {
         switch self {
-        case .exciting: return "outro-exciting"
-        case .mystical: return "outro-mystical"
+        case .exciting:
+            return URL(string: "https://file.garden/adsy8IqfImsnsZZL/misteramazingOutro916.mp4")!
+        case .mystical:
+            return URL(string: "https://file.garden/adsy8IqfImsnsZZL/outro_writeon_916_fast.mp4")!
         }
     }
 
-    var fileName: String { resource + ".mp4" }
+    var fileName: String { "outro-" + rawValue + ".mp4" }
 }
 
 enum OutroBuilder {
 
     enum BuildError: LocalizedError {
-        case missingAsset(String)
+        case downloadFailed(String)
+        case unplayable
 
         var errorDescription: String? {
             switch self {
-            case .missingAsset(let name):
-                return "The outro asset “\(name)” is missing from the app bundle."
+            case .downloadFailed(let reason):
+                return "Couldn't download the outro: \(reason)"
+            case .unplayable:
+                return "The downloaded outro couldn't be read."
             }
         }
     }
@@ -69,15 +77,16 @@ enum OutroBuilder {
         let destination = media.appendingPathComponent(style.fileName)
 
         if !FileManager.default.fileExists(atPath: destination.path) {
-            guard let source = Bundle.main.url(forResource: style.resource, withExtension: "mp4") else {
-                throw BuildError.missingAsset(style.fileName)
-            }
-            try FileManager.default.copyItem(at: source, to: destination)
+            try await download(style.remoteURL, to: destination)
         }
 
         let asset = AVURLAsset(url: destination)
         let length = (try? await asset.load(.duration).seconds) ?? 0
-        guard length > 0.1 else { throw BuildError.missingAsset(style.fileName) }
+        guard length > 0.1 else {
+            // A truncated or error-page download would sit here forever.
+            try? FileManager.default.removeItem(at: destination)
+            throw BuildError.unplayable
+        }
 
         let end = project.duration
         let offset = max(0, end - length)
@@ -91,5 +100,22 @@ enum OutroBuilder {
         project.append(clip)
 
         return Result(project: project, jumpTo: offset)
+    }
+
+    private static func download(_ url: URL, to destination: URL) async throws {
+        do {
+            // download(from:) streams to disk — no 9 MB sitting in memory.
+            let (temporary, response) = try await URLSession.shared.download(from: url)
+            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                try? FileManager.default.removeItem(at: temporary)
+                throw BuildError.downloadFailed("server said \(http.statusCode)")
+            }
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.moveItem(at: temporary, to: destination)
+        } catch let error as BuildError {
+            throw error
+        } catch {
+            throw BuildError.downloadFailed(error.localizedDescription)
+        }
     }
 }

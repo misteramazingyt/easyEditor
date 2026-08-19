@@ -318,9 +318,10 @@ struct EditorView: View {
             if editor.isImporting || editor.isRebuilding || editor.isGeneratingCaptions || editor.isProcessing {
                 VStack(spacing: 8) {
                     ProgressView()
-                    Text(editor.isImporting ? "Importing…"
-                         : editor.isGeneratingCaptions ? "Transcribing…"
-                         : editor.isProcessing ? "Processing clip…" : "Updating preview…")
+                    Text(editor.processingNote
+                         ?? (editor.isImporting ? "Importing…"
+                             : editor.isGeneratingCaptions ? "Transcribing…"
+                             : editor.isProcessing ? "Processing clip…" : "Updating preview…"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

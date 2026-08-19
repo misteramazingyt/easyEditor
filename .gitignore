@@ -18,9 +18,6 @@ EasyEditor/Info.plist
 # App runtime data / media (should never be committed)
 *.mov
 *.mp4
-# …except the bundled outro media, which ships with the app.
-!outro-assets/*.mp4
-!outro-assets/*.mov
 
 # Build output
 dist/
