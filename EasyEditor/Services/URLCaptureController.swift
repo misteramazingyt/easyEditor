@@ -271,7 +271,7 @@ final class URLCaptureController: NSObject, ObservableObject, WKNavigationDelega
         return true;
       };
 
-      function rangeFor(text) {
+      function findOnce(text) {
         const sel = window.getSelection();
         sel.removeAllRanges();
         window.scrollTo(0, 0);
@@ -280,6 +280,35 @@ final class URLCaptureController: NSObject, ObservableObject, WKNavigationDelega
         const range = sel.getRangeAt(0).cloneRange();
         sel.removeAllRanges();
         return range;
+      }
+
+      function rangeFor(text) {
+        const cleaned = (text || "").replace(/\\s+/g, " ").trim();
+        if (!cleaned) return null;
+        const direct = findOnce(cleaned);
+        if (direct) return direct;
+        // Curly quotes, en dashes and non-breaking spaces are the usual
+        // reason an exact match fails; retry on a plain-ASCII rewrite.
+        const ascii = cleaned
+          .replace(/[‘’‚‛]/g, "'")
+          .replace(/[“”„]/g, '"')
+          .replace(/[–—]/g, "-")
+          .replace(/ /g, " ");
+        if (ascii !== cleaned) {
+          const asciiMatch = findOnce(ascii);
+          if (asciiMatch) return asciiMatch;
+        }
+        // Then shrink from the front: the opening words are the least likely
+        // to have been re-typeset.
+        const words = cleaned.split(" ");
+        const steps = [15, 12, 10, 8, 6, 5, 4];
+        for (let i = 0; i < steps.length; i++) {
+          const n = steps[i];
+          if (words.length <= n) continue;
+          const partial = findOnce(words.slice(0, n).join(" "));
+          if (partial) return partial;
+        }
+        return null;
       }
 
       function wrap(range) {
@@ -300,7 +329,6 @@ final class URLCaptureController: NSObject, ObservableObject, WKNavigationDelega
       }
 
       window.__eeHighlight = function (targets) {
-        ensureStyle();
         document.querySelectorAll("mark.__ee_hl").forEach(function (m) {
           const parent = m.parentNode;
           while (m.firstChild) parent.insertBefore(m.firstChild, m);
@@ -323,7 +351,10 @@ final class URLCaptureController: NSObject, ObservableObject, WKNavigationDelega
             }
           }
           const mark = wrap(range);
-          if (mark && !first) first = mark;
+          if (mark) {
+            styleMark(mark);
+            if (!first) first = mark;
+          }
         });
         if (first) {
           first.scrollIntoView({ block: "center", inline: "nearest" });

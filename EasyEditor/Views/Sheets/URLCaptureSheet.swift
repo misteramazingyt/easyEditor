@@ -37,13 +37,8 @@ struct URLCaptureSheet: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            // Most of the time the link is already on the clipboard.
-            if urlText.isEmpty, let pasted = UIPasteboard.general.string,
-               pasted.contains("."), !pasted.contains(" ") {
-                urlText = pasted
-            }
-            urlFocused = urlText.isEmpty
+        .task {
+            await autoPaste()
         }
     }
 
@@ -67,6 +62,14 @@ struct URLCaptureSheet: View {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
             }
+            PasteButton(payloadType: String.self) { items in
+                if let first = items.first {
+                    Task { @MainActor in paste(first) }
+                }
+            }
+            .labelStyle(.iconOnly)
+            .buttonBorderShape(.capsule)
+            .tint(.blue)
             Button("Go") { go() }
                 .font(.callout.weight(.semibold))
                 .disabled(urlText.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -80,6 +83,43 @@ struct URLCaptureSheet: View {
     private func go() {
         urlFocused = false
         controller.load(urlText)
+    }
+
+    /// Load whatever link is already on the clipboard, with no prompt and no
+    /// tap. Pattern detection hands back only what the system already
+    /// recognises as a URL, so it doesn't trip the paste alert the way
+    /// reading the pasteboard's text would.
+    private func autoPaste() async {
+        guard urlText.isEmpty else { return }
+        let patterns: Set<UIPasteboard.DetectionPattern> = [.probableWebURL]
+        guard let values = try? await UIPasteboard.general.detectedValues(for: patterns) else {
+            urlFocused = true
+            return
+        }
+        var candidate: String?
+        let value = values[.probableWebURL]
+        if let text = value as? String {
+            candidate = text
+        } else if let list = value as? [String] {
+            candidate = list.first
+        } else if let url = value as? URL {
+            candidate = url.absoluteString
+        } else if let urls = value as? [URL] {
+            candidate = urls.first?.absoluteString
+        }
+        guard let candidate, !candidate.isEmpty else {
+            urlFocused = true
+            return
+        }
+        urlText = candidate
+        go()
+    }
+
+    private func paste(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        urlText = trimmed
+        go()
     }
 
     // MARK: Status
