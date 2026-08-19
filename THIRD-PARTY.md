@@ -3,8 +3,21 @@
 ## ntsc-rs
 `rust/ntscbridge` links the [ntsc-rs](https://github.com/ntsc-rs/ntsc-rs) crate,
 cross-compiled for iOS. Copyright the ntsc-rs authors, licensed
-**MIT OR ISC OR Apache-2.0**. The bundled presets in `aesthetic-presets/` are
-ntsc-rs preset JSON from the Kelleesh24 preset collection.
+**MIT OR ISC OR Apache-2.0**.
+
+## ntsc-rs presets
+The presets in `aesthetic-presets/` are community ntsc-rs preset JSON, from
+**Kelleesh24's NTSC-RS Presets** and **Cultra's NTSC-RS Presets Pack**. 110
+preset files were rendered against the dummy frame and compared as two-second
+sequences; exact duplicates and looks that could not be told apart, in stills
+or in motion, were collapsed to one representative each, leaving 25. Some have
+been given clearer display names than their working titles.
+
+## Aesthetic preview frame
+`aesthetic-presets/aesthetic-dummy.jpg` and the `preview-*.jpg` stills rendered
+from it come from
+[Na Pali Coast Kauai Hawaii](https://commons.wikimedia.org/wiki/File:Na_Pali_Coast_Kauai_Hawaii_(32406276598).jpg)
+by **dronepicr**, licensed **CC BY 2.0**. Cropped to 4:3 and downscaled.
 
 ## crtemu (newpixie)
 `EasyEditor/Shaders/CrtEmu.metal` is a port of the CRT fragment shader from

@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Project-wide look: a treated backdrop under everything, light spilling off
-/// the picture onto it, and a lighter dose of the same treatment over the top.
+/// Project-wide look, picked by eye: every tile is the same frame wearing the
+/// treatment, so you choose the depth of an effect by seeing it rather than by
+/// reading its name.
 struct AestheticsSheet: View {
     @EnvironmentObject private var editor: EditorState
     @Environment(\.dismiss) private var dismiss
@@ -10,29 +11,48 @@ struct AestheticsSheet: View {
         editor.project.aesthetic ?? AestheticSettings()
     }
 
+    /// None, the two device shaders, then every ntsc-rs look.
+    private enum Look: Identifiable {
+        case mode(AestheticMode)
+        case preset(AestheticPreset)
+
+        var id: String {
+            switch self {
+            case .mode(let mode): return "mode." + mode.rawValue
+            case .preset(let preset): return "preset." + preset.id
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .mode(let mode): return mode.title
+            case .preset(let preset): return preset.name
+            }
+        }
+    }
+
+    private var looks: [Look] {
+        [.mode(.none), .mode(.crt), .mode(.vhs)]
+            + AestheticLibrary.presets.map { Look.preset($0) }
+    }
+
+    private let columns = [GridItem(.flexible(), spacing: 10),
+                           GridItem(.flexible(), spacing: 10),
+                           GridItem(.flexible(), spacing: 10)]
+
     var body: some View {
         VStack(spacing: 0) {
             header
             ScrollView {
                 VStack(spacing: 20) {
-                    modeSection
-                    if settings.mode == .ntsc {
-                        presetSection
-                    }
+                    gallery
                     if settings.mode != .none {
                         strengthSection
                         causticsSection
                     }
-                    VStack(spacing: 4) {
-                        label("Preview build")
-                        Text(editor.buildSummary)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 24)
+                .padding(.bottom, 28)
             }
         }
         .foregroundStyle(.white)
@@ -52,97 +72,108 @@ struct AestheticsSheet: View {
         .padding(.vertical, 14)
     }
 
-    // MARK: Mode
+    // MARK: Gallery
 
-    private var modeSection: some View {
-        VStack(spacing: 8) {
-            label("Background")
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()),
-                                GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(AestheticMode.allCases) { mode in
-                    modeTile(mode)
-                }
+    private var gallery: some View {
+        LazyVGrid(columns: columns, spacing: 14) {
+            ForEach(looks) { look in
+                tile(look)
             }
-            Text(modeBlurb)
-                .font(.caption2).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.top, 4)
+    }
+
+    private func isSelected(_ look: Look) -> Bool {
+        switch look {
+        case .mode(let mode): return settings.mode == mode
+        case .preset(let preset):
+            return settings.mode == .ntsc && settings.presetID == preset.id
         }
     }
 
-    private var modeBlurb: String {
-        switch settings.mode {
-        case .none: return "No treatment — the canvas stays black."
-        case .crt: return "Hard scanlines, aperture grille and phosphor glow."
-        case .vhs: return "Smeared colour, unstable line, head-switch tear."
-        case .ntsc: return "Broadcast signal: dot crawl and ringing, set by the preset below."
-        }
-    }
-
-    private func modeTile(_ mode: AestheticMode) -> some View {
-        let isOn = settings.mode == mode
-        return Button {
-            editor.updateAesthetic { current in
+    private func select(_ look: Look) {
+        editor.updateAesthetic { current in
+            switch look {
+            case .mode(let mode):
                 current.mode = mode
-                if mode != .none, current.presetID == nil {
-                    current.presetID = AestheticLibrary.presets.first?.id
-                }
+            case .preset(let preset):
+                current.mode = .ntsc
+                current.presetID = preset.id
             }
-            Haptics.selection()
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: mode.systemImage).font(.system(size: 18))
-                Text(mode.title).font(.system(size: 10, weight: .semibold))
-            }
-            .foregroundStyle(isOn ? .blue : .white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(isOn ? Color.blue : .clear, lineWidth: 1.5))
         }
-        .buttonStyle(.plain)
+        Haptics.selection()
     }
 
-    // MARK: Presets
-
-    private var presetSection: some View {
-        VStack(spacing: 8) {
-            label("ntsc-rs preset")
-            if AestheticLibrary.presets.isEmpty {
-                Text("No presets found in the bundle.")
-                    .font(.caption).foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(AestheticLibrary.presets) { preset in
-                            presetChip(preset)
+    private func tile(_ look: Look) -> some View {
+        let selected = isSelected(look)
+        return Button { select(look) } label: {
+            VStack(spacing: 6) {
+                preview(look)
+                    .aspectRatio(4 / 3, contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(selected ? Color.accentColor : .white.opacity(0.12),
+                                      lineWidth: selected ? 2.5 : 1))
+                    .overlay(alignment: .bottomTrailing) {
+                        if selected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 15))
+                                .foregroundStyle(.white, Color.accentColor)
+                                .padding(5)
                         }
                     }
-                    .padding(.horizontal, 2)
-                }
-                Text("Parameters come from the ntsc-rs presets; the render is a real-time emulation of them.")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(look.title)
+                    .font(.system(size: 10, weight: selected ? .bold : .medium))
+                    .foregroundStyle(selected ? .white : .white.opacity(0.65))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func preview(_ look: Look) -> some View {
+        switch look {
+        case .mode(let mode):
+            ShaderPreview(mode: mode)
+        case .preset(let preset):
+            if let image = AestheticPreview.bundled(preset.id) {
+                Image(uiImage: image).resizable()
+            } else {
+                Self.placeholder("antenna.radiowaves.left.and.right")
             }
         }
     }
 
-    private func presetChip(_ preset: AestheticPreset) -> some View {
-        let isOn = settings.presetID == preset.id
-        return Button {
-            editor.updateAesthetic { $0.presetID = preset.id }
-            Haptics.selection()
-        } label: {
-            Text(preset.name)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(isOn ? Color.blue.opacity(0.35) : .white.opacity(0.07), in: Capsule())
-                .overlay(Capsule().strokeBorder(isOn ? Color.blue : .clear, lineWidth: 1.2))
-                .foregroundStyle(.white)
+    /// CRT and VHS are rendered on the device, so their tiles fill in a beat
+    /// after the sheet opens rather than holding it up.
+    private struct ShaderPreview: View {
+        let mode: AestheticMode
+        @State private var image: UIImage?
+
+        var body: some View {
+            Group {
+                if let image {
+                    Image(uiImage: image).resizable()
+                } else {
+                    AestheticsSheet.placeholder(mode.systemImage)
+                }
+            }
+            .task(id: mode) { image = await AestheticPreview.rendered(mode: mode) }
         }
-        .buttonStyle(.plain)
+    }
+
+    /// No still to show yet — hold the shape rather than leave a hole in the
+    /// grid.
+    fileprivate static func placeholder(_ systemImage: String) -> some View {
+        ZStack {
+            Color.white.opacity(0.06)
+            Image(systemName: systemImage)
+                .font(.system(size: 18))
+                .foregroundStyle(.white.opacity(0.5))
+        }
     }
 
     // MARK: Strength & caustics
