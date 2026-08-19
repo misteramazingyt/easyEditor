@@ -65,11 +65,14 @@ struct CanvasTransformOverlay: View {
                     .onTapGesture { point in select(at: point, canvas: canvas) }
 
                 if let clip = editor.selectedClip, clip.isVisual {
-                    if let keys = clip.motionKeys, keys.keys.count > 1 {
-                        motionPath(clip: clip, keys: keys, canvas: canvas)
-                    }
                     if let box = screenFrame(of: clip, canvas: canvas) {
                         boxView(clip: clip, box: box, canvas: canvas)
+                    }
+                    // Over the box, not under it: a keyframe sitting inside the
+                    // layer has to stay grabbable, and the box takes the whole
+                    // of its own area.
+                    if let keys = clip.motionKeys, keys.keys.count > 1 {
+                        motionPath(clip: clip, keys: keys, canvas: canvas)
                     }
                 }
             }
