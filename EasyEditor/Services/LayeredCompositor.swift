@@ -27,6 +27,8 @@ struct CompositorLayer {
     var blend: BlendMode?
     /// Timeline stacking slot: 0 is the storyline, +n stacks above it.
     var zOrder: Int = 0
+    /// Whether this layer's light spills into the backdrop.
+    var castsCaustics: Bool = true
 
     // Connected-clip motion (zero clipEnd = no motion evaluation).
     var clipStart: Double = 0
@@ -53,6 +55,7 @@ struct CompositorOverlay {
     var blend: BlendMode?
     /// Timeline stacking slot, shared scale with CompositorLayer.
     var zOrder: Int = 0
+    var castsCaustics: Bool = true
 }
 
 final class CompositorInstruction: NSObject, AVVideoCompositionInstructionProtocol {
@@ -64,11 +67,14 @@ final class CompositorInstruction: NSObject, AVVideoCompositionInstructionProtoc
 
     let layers: [CompositorLayer]
     let overlays: [CompositorOverlay]
+    let aesthetic: AestheticFrameConfig?
 
-    init(timeRange: CMTimeRange, layers: [CompositorLayer], overlays: [CompositorOverlay]) {
+    init(timeRange: CMTimeRange, layers: [CompositorLayer], overlays: [CompositorOverlay],
+         aesthetic: AestheticFrameConfig? = nil) {
         self.timeRange = timeRange
         self.layers = layers
         self.overlays = overlays
+        self.aesthetic = aesthetic
         self.requiredSourceTrackIDs = layers.map { NSNumber(value: $0.trackID) }
         super.init()
     }
@@ -127,6 +133,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             let seq: Int
             let image: CIImage
             let blend: BlendMode?
+            let castsCaustics: Bool
         }
         var pending: [Pending] = []
 
@@ -292,7 +299,8 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             }
 
             pending.append(Pending(z: layer.zOrder, seq: pending.count,
-                                   image: image, blend: layer.blend))
+                                   image: image, blend: layer.blend,
+                                   castsCaustics: layer.castsCaustics))
         }
 
         // 7. Title / image overlays (Core Image y-axis points up, placements
@@ -346,14 +354,44 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 ])
             }
             pending.append(Pending(z: overlay.zOrder, seq: pending.count,
-                                   image: image, blend: overlay.blend))
+                                   image: image, blend: overlay.blend,
+                                   castsCaustics: overlay.castsCaustics))
+        }
+
+        let ordered = pending.sorted(by: { ($0.z, $0.seq) < ($1.z, $1.seq) })
+        let time = request.compositionTime.seconds
+
+        if let aesthetic = instruction.aesthetic {
+            // What the picture throws off, minus anything opted out (camera
+            // takes, by default) — used for both the ghost and the spill.
+            var spillSource: CIImage?
+            for item in ordered where item.castsCaustics {
+                spillSource = spillSource.map {
+                    item.image.cropped(to: canvas).composited(over: $0)
+                } ?? item.image.cropped(to: canvas)
+            }
+            result = AestheticRenderer.backdrop(aesthetic, canvas: canvas,
+                                                time: time, ghost: spillSource)
+            if let spillSource,
+               let spill = AestheticRenderer.caustics(from: spillSource, canvas: canvas,
+                                                      amount: aesthetic.caustics * aesthetic.strength) {
+                result = spill.applyingFilter("CIScreenBlendMode", parameters: [
+                    kCIInputBackgroundImageKey: result,
+                ]).cropped(to: canvas)
+            }
         }
 
         // Lowest slot first; ties keep their build order (an outgoing clip
         // stays under the incoming one through a transition).
-        for item in pending.sorted(by: { ($0.z, $0.seq) < ($1.z, $1.seq) }) {
+        for item in ordered {
             result = Self.composite(item.image, over: result,
                                     blend: item.blend, canvas: canvas)
+        }
+
+        // The picture takes a lighter dose than the ground it sits on.
+        if let aesthetic = instruction.aesthetic {
+            result = AestheticRenderer.treat(result, aesthetic, canvas: canvas,
+                                             time: time, weight: 0.38)
         }
 
         ciContext.render(result, to: output, bounds: canvas,

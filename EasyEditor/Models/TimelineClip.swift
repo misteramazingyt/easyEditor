@@ -81,6 +81,10 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     /// Audio fade-in, in seconds (music/voice/SFX).
     var fadeIn: Double?
 
+    /// Shot with the app's own camera — kept out of the caustic spill by
+    /// default, since a face shouldn't smear the room with its own glow.
+    var isCameraTake: Bool?
+
     /// A stand-in slot on the storyline: black media holding time open for
     /// footage that hasn't been shot or chosen yet.
     var isPlaceholder: Bool?

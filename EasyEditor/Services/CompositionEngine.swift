@@ -368,6 +368,17 @@ struct CompositionEngine {
         let duration = max(compositionDuration, project.duration)
         guard duration > 0 else { return nil }
 
+        let settings = project.aesthetic ?? AestheticSettings()
+        let excludeTakes = settings.excludeCameraTakes
+        let aesthetic: AestheticFrameConfig? = settings.isActive
+            ? AestheticFrameConfig(
+                mode: settings.mode,
+                params: AestheticLibrary.preset(id: settings.presetID)?.params
+                    ?? AestheticParams(),
+                strength: settings.strength,
+                caustics: settings.caustics)
+            : nil
+
         // Boundary times: clip edges, transition sub-midpoints, overlay edges.
         var boundaries: Set<Int> = [0, quantize(duration)]
         for p in placed {
@@ -451,6 +462,7 @@ struct CompositionEngine {
                                             role: .solo, style: .none,
                                             regionStart: 0, regionEnd: 0)
                     layer.zOrder = broll.clip.stackIndex
+                    layer.castsCaustics = !(excludeTakes && broll.clip.isCameraTake == true)
                     layer.clipStart = broll.start
                     layer.clipEnd = broll.end
                     layer.inOut = broll.clip.inOut
@@ -491,7 +503,8 @@ struct CompositionEngine {
                 start: CMTime(value: CMTimeValue(quantize(t0)), timescale: Self.timescale),
                 end: CMTime(value: CMTimeValue(quantize(t1)), timescale: Self.timescale))
             instructions.append(CompositorInstruction(timeRange: range,
-                                                      layers: layers, overlays: overlays))
+                                                      layers: layers, overlays: overlays,
+                                                      aesthetic: aesthetic))
         }
         guard !instructions.isEmpty else { return nil }
 

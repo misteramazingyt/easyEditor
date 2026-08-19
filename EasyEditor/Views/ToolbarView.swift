@@ -11,6 +11,7 @@ struct ToolbarView: View {
     let onText: () -> Void
     let onCaptions: () -> Void
     let onAutoBRoll: () -> Void
+    let onAesthetics: () -> Void
     let onOutro: () -> Void
 
     var body: some View {
@@ -24,6 +25,7 @@ struct ToolbarView: View {
                 tile("Text", systemImage: "textformat", action: onText)
                 tile("Captions", systemImage: "captions.bubble", action: onCaptions)
                 tile("B-Roll", systemImage: "wand.and.stars", action: onAutoBRoll)
+                tile("Aesthetics", systemImage: "tv.inset.filled", action: onAesthetics)
                 tile("Outro", systemImage: "flag.checkered", action: onOutro)
             }
             .padding(.horizontal, 12)

@@ -8,6 +8,8 @@ struct VideoProject: Identifiable, Codable, Equatable {
     var modifiedAt = Date()
     var aspect: AspectPreset = .portrait916
     var clips: [TimelineClip] = []
+    /// Optional so projects saved before the look existed still decode.
+    var aesthetic: AestheticSettings?
 
     // MARK: Storyline
 

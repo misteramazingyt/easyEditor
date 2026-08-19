@@ -31,6 +31,7 @@ struct EditorView: View {
     @State private var blinkOn = true
     @State private var isFramingCamera = false
     @State private var showOutroMenu = false
+    @State private var showAesthetics = false
     @State private var showReplacePicker = false
     @State private var replaceTargetID: UUID?
     @State private var replaceMedia: [PhotosPickerItem] = []
@@ -75,6 +76,7 @@ struct EditorView: View {
                     onText: { textSheetIsTitle = false; showTextSheet = true },
                     onCaptions: { editor.generateCaptions() },
                     onAutoBRoll: { showAutoBRoll = true },
+                    onAesthetics: { showAesthetics = true },
                     onOutro: { showOutroMenu = true })
             }
         }
@@ -214,6 +216,9 @@ struct EditorView: View {
             DesktopLibrarySheet { image in
                 await editor.importWebImage(from: image.fullURL)
             }
+        }
+        .sheet(isPresented: $showAesthetics) {
+            AestheticsSheet().environmentObject(editor)
         }
         .sheet(isPresented: $showAutoBRoll) {
             AutoBRollSheet().environmentObject(editor)

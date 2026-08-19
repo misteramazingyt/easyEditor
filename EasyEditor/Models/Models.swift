@@ -284,6 +284,59 @@ struct OverlayPlacement: Codable, Equatable {
     static let image = OverlayPlacement(centerX: 0.5, centerY: 0.5, widthFraction: 0.6)
 }
 
+// MARK: - Aesthetics (CRT / VHS / NTSC treatment)
+
+enum AestheticMode: String, Codable, CaseIterable, Identifiable {
+    case none, crt, vhs, ntsc
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .none: return "None"
+        case .crt: return "CRT"
+        case .vhs: return "VHS"
+        case .ntsc: return "NTSC"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .none: return "circle.slash"
+        case .crt: return "tv"
+        case .vhs: return "recordingtape"
+        case .ntsc: return "antenna.radiowaves.left.and.right"
+        }
+    }
+
+    /// The glow a backdrop of this kind throws.
+    var tint: (r: Double, g: Double, b: Double) {
+        switch self {
+        case .none: return (0, 0, 0)
+        case .crt: return (0.10, 0.55, 0.22)   // phosphor green
+        case .vhs: return (0.32, 0.12, 0.42)   // magenta-violet bloom
+        case .ntsc: return (0.14, 0.20, 0.50)  // blue broadcast cast
+        }
+    }
+}
+
+/// Project-wide look. The backdrop wears the effect fully; the picture over it
+/// wears a lighter version, so the whole frame reads as doused in it without
+/// the footage disappearing.
+struct AestheticSettings: Codable, Equatable {
+    var mode: AestheticMode = .none
+    /// Bundled ntsc-rs preset slug driving the parameters.
+    var presetID: String?
+    /// 0…1, scales everything.
+    var strength: Double = 0.6
+    /// How much the picture spills light into the backdrop.
+    var caustics: Double = 0.5
+    /// Camera takes usually shouldn't smear the room with their own glow.
+    var excludeCameraTakes: Bool = true
+
+    var isActive: Bool { mode != .none && strength > 0.01 }
+}
+
 // MARK: - Blend modes
 
 enum BlendMode: String, Codable, CaseIterable, Identifiable {

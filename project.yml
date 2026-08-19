@@ -19,6 +19,8 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: EasyEditor
+      - path: aesthetic-presets
+        buildPhase: resources
     info:
       path: EasyEditor/Info.plist
       properties:

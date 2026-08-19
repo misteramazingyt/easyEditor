@@ -687,6 +687,7 @@ final class EditorState: ObservableObject {
                                 assetDuration: 0, trimStart: 0, trimEnd: 0.1,
                                 offset: playback.currentTime)
         clip.isLiveRecording = true
+        clip.isCameraTake = true
         clip.laneIndex = max(1, project.maxStackAbove + 1)
         project.append(clip)
         liveClipID = clip.id
@@ -746,6 +747,14 @@ final class EditorState: ObservableObject {
             liveClipID = nil
             rebuild()
         }
+    }
+
+    // MARK: - Aesthetics
+
+    func updateAesthetic(_ change: (inout AestheticSettings) -> Void) {
+        var settings = project.aesthetic ?? AestheticSettings()
+        change(&settings)
+        project.aesthetic = settings
     }
 
     // MARK: - Placeholder slots
