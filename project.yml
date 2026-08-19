@@ -14,6 +14,9 @@ settings:
     # Core Image kernels with Xcode).
     MTL_COMPILER_FLAGS: "-fcikernel"
     MTLLINKER_FLAGS: "-cikernel"
+    SWIFT_OBJC_BRIDGING_HEADER: EasyEditor/NtscBridge.h
+    LIBRARY_SEARCH_PATHS: $(inherited) $(SRCROOT)/rust/target/aarch64-apple-ios/release
+    OTHER_LDFLAGS: $(inherited) -lntscbridge
     DEVELOPMENT_TEAM: "" # <-- set your Apple Developer Team ID in Xcode
 
 targets:

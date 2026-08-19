@@ -1,0 +1,20 @@
+[package]
+name = "ntscbridge"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# A C-ABI shim over the real ntsc-rs signal processing, built as a static
+# library and linked into the iOS app at build time.
+[lib]
+name = "ntscbridge"
+crate-type = ["staticlib"]
+
+[dependencies]
+# Not on crates.io; pinned to a commit so the build is reproducible.
+ntsc-rs = { git = "https://github.com/ntsc-rs/ntsc-rs", rev = "af9833b4bb81f195f7fe4a3667211f2a94139a42" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

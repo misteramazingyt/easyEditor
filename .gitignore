@@ -30,3 +30,6 @@ GreenDeck/
 # Local reference material
 IMG_*.PNG
 icon.png
+
+# Rust build output (the iOS static lib is built in CI)
+rust/**/target/

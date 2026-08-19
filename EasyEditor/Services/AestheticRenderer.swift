@@ -99,6 +99,8 @@ struct AestheticFrameConfig: Equatable {
     var params: AestheticParams
     var strength: Double
     var caustics: Double
+    /// Bundled ntsc-rs preset slug, handed to the Rust processor as-is.
+    var presetID: String?
 }
 
 enum AestheticRenderer {
@@ -227,7 +229,20 @@ enum AestheticRenderer {
         case .none: modeIndex = -1
         }
         var kernelHandled = false
-        if modeIndex >= 0,
+        // NTSC goes through the real ntsc-rs, driven by the preset itself.
+        if config.mode == .ntsc, weight > 0.5,
+           let processed = NtscRSProcessor.shared.process(image, canvas: canvas,
+                                                          presetID: config.presetID,
+                                                          frame: Int(time * 30)) {
+            let blend = CGFloat(min(1, max(0, s)))
+            image = blend >= 0.99
+                ? processed
+                : step(image) { source in
+                    fade(processed, blend).composited(over: source).cropped(to: canvas)
+                }
+            kernelHandled = true
+        }
+        if !kernelHandled, modeIndex >= 0,
            let shaded = AestheticKernel.shared.apply(to: image, canvas: canvas,
                                                      mode: modeIndex, strength: s,
                                                      time: time, params: p),

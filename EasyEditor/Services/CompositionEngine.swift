@@ -395,7 +395,8 @@ struct CompositionEngine {
                 mode: settings.mode,
                 params: Self.params(for: settings),
                 strength: settings.strength,
-                caustics: settings.caustics)
+                caustics: settings.caustics,
+                presetID: settings.presetID)
             : nil
 
         // Boundary times: clip edges, transition sub-midpoints, overlay edges.
