@@ -27,6 +27,7 @@ struct EditorView: View {
     @State private var showAutoBRoll = false
     @State private var showQuotes = false
     @State private var showMyQuotes = false
+    @State private var showURLCapture = false
     @State private var blinkOn = true
     @State private var isFramingCamera = false
 
@@ -166,6 +167,11 @@ struct EditorView: View {
             } label: {
                 Label("My Quotes", systemImage: "quote.bubble")
             }
+            Button {
+                showURLCapture = true
+            } label: {
+                Label("URL", systemImage: "safari")
+            }
             Button("Cancel", role: .cancel) {}
         }
         .sheet(isPresented: $showWebSearch) {
@@ -184,6 +190,11 @@ struct EditorView: View {
         .sheet(isPresented: $showQuotes) {
             QuoteSheet { url, placement in
                 await editor.importWebImage(from: url, placement: placement)
+            }
+        }
+        .sheet(isPresented: $showURLCapture) {
+            URLCaptureSheet { data, placement in
+                editor.addImage(data: data, placement: placement)
             }
         }
         .sheet(isPresented: $showMyQuotes) {

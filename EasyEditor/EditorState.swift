@@ -292,6 +292,23 @@ final class EditorState: ObservableObject {
         project.append(clip)
     }
 
+    /// Place already-in-hand image data (a web-page screenshot) at the playhead.
+    @discardableResult
+    func addImage(data: Data, placement: OverlayPlacement? = nil) -> Bool {
+        guard let fileName = importer.saveImageData(data, projectID: project.id) else {
+            errorMessage = "That screenshot couldn't be saved."
+            return false
+        }
+        pushUndo()
+        var clip = TimelineClip.image(fileName: fileName, at: playback.currentTime)
+        if let placement { clip.placement = placement }
+        clip.laneIndex = freeStackIndex(for: clip, desired: 1)
+        project.append(clip)
+        selectedClipID = clip.id
+        showToast("Screenshot added")
+        return true
+    }
+
     /// Download a web image and drop it on the timeline at the playhead.
     func importWebImage(from url: URL, placement: OverlayPlacement? = nil) async -> Bool {
         do {
