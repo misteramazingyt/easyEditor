@@ -107,7 +107,7 @@ struct URLCaptureSheet: View {
                     Text(found ? "Highlight found and centred"
                                : "Couldn't find that passage — scroll to what you want")
                         .font(.caption2)
-                        .foregroundStyle(found ? .secondary : .orange)
+                        .foregroundStyle(found ? Color.secondary : Color.orange)
                 } else {
                     Image(systemName: "checkmark.circle").font(.caption2).foregroundStyle(.green)
                     Text(controller.pageTitle.isEmpty ? "Ready" : controller.pageTitle)
