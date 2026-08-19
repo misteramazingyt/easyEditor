@@ -29,21 +29,19 @@ struct KeyframeLozenge: View {
     }
 
     var body: some View {
-        Button {
-            onTap()
-        } label: {
-            Capsule()
-                .fill(filled ? tint : .clear)
-                .frame(width: compact ? 18 : 22, height: compact ? 11 : 13)
-                .overlay(Capsule().strokeBorder(tint, lineWidth: filled ? 0 : 1.4))
-                .contentShape(Capsule().inset(by: -8))
-        }
-        .buttonStyle(.plain)
-        .onLongPressGesture(minimumDuration: 0.4) {
-            guard marker != .off else { return }
-            Haptics.selection()
-            showEasing = true
-        }
+        // Not a Button: a button's own tap would race the long press, and the
+        // hold is the only way to reach the easing.
+        Capsule()
+            .fill(filled ? tint : .clear)
+            .frame(width: compact ? 18 : 22, height: compact ? 11 : 13)
+            .overlay(Capsule().strokeBorder(tint, lineWidth: filled ? 0 : 1.4))
+            .contentShape(Capsule().inset(by: -10))
+            .onTapGesture { onTap() }
+            .onLongPressGesture(minimumDuration: 0.4) {
+                guard marker != .off else { return }
+                Haptics.selection()
+                showEasing = true
+            }
         .confirmationDialog("Easing", isPresented: $showEasing, titleVisibility: .visible) {
             ForEach(EasingCurve.allCases) { curve in
                 Button {
