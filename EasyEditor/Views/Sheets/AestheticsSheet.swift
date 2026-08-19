@@ -49,6 +49,9 @@ struct AestheticsSheet: View {
                     gallery
                     if settings.mode != .none {
                         strengthSection
+                        if settings.mode == .crt {
+                            haloSection
+                        }
                         causticsSection
                         engineStatus
                     }
@@ -193,6 +196,27 @@ struct AestheticsSheet: View {
             ), in: 0...1) { editing in
                 if editing { editor.beginGesture() }
             }
+        }
+    }
+
+    /// CRT only: the other looks have no phosphor to bloom, so there is
+    /// nothing here for them to turn up.
+    private var haloSection: some View {
+        VStack(spacing: 4) {
+            HStack {
+                label("Phosphor halo")
+                Text("\(Int(settings.halo * 100))%")
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(
+                get: { settings.halo },
+                set: { value in editor.updateAesthetic { $0.halo = value } }
+            ), in: 0...1.5) { editing in
+                if editing { editor.beginGesture() }
+            }
+            Text("Light thrown into the black around the picture, and the ghosting that comes with it.")
+                .font(.caption2).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

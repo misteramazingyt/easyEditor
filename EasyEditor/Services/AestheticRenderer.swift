@@ -99,6 +99,8 @@ struct AestheticFrameConfig: Equatable {
     var params: AestheticParams
     var strength: Double
     var caustics: Double
+    /// CRT only: how far the phosphor halo spreads into the surround.
+    var halo: Double = 0.8
     /// Bundled ntsc-rs preset slug, handed to the Rust processor as-is.
     var presetID: String?
 }
@@ -231,12 +233,29 @@ enum AestheticRenderer {
         case .none: modeIndex = -1
         }
         var kernelHandled = false
-        // CRT is crtemu's tube, ported whole.
-        if config.mode == .crt,
-           let tube = AestheticKernel.shared.applyCRT(to: image, canvas: canvas,
-                                                      strength: s, time: time),
-           !tube.extent.isEmpty {
-            return tube.cropped(to: canvas)
+        // CRT is crtemu's tube, ported whole — but the phosphor spreads the
+        // light before the glass curves and scans it, so the halo goes first.
+        // Applied afterwards it reads as a wash laid over the picture instead
+        // of light coming off it.
+        if config.mode == .crt {
+            let lit = AestheticKernel.shared.phosphorGlow(
+                image, canvas: canvas, amount: config.halo * s)
+            // Composite video is far softer along the line than down it; that
+            // anisotropy is what makes a picture sit *in* the glass.
+            let smeared = step(lit) { source in
+                source.clampedToExtent()
+                    .applyingFilter("CIMotionBlur", parameters: [
+                        kCIInputRadiusKey: max(1, canvas.width / 384),
+                        kCIInputAngleKey: 0,
+                    ])
+                    .cropped(to: canvas)
+            }
+            if let tube = AestheticKernel.shared.applyCRT(to: smeared, canvas: canvas,
+                                                          strength: s, time: time),
+               !tube.extent.isEmpty {
+                return tube.cropped(to: canvas)
+            }
+            image = smeared
         }
         // NTSC goes through the real ntsc-rs, driven by the preset itself.
         if config.mode == .ntsc,

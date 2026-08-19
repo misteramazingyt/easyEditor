@@ -15,6 +15,17 @@ using namespace metal;
 // shadow mask, filmic tone map, noise and flicker. The TV bezel texture is
 // left out — we are dressing a video, not drawing a television.
 
+// The phosphor bloom that runs *before* the tube. Ported from the outro
+// renderer, where the halo's radii and gains were fitted against the reference
+// artwork's measured falloff (mean-to-core ratio in rings 1-10, 10-25, 25-50,
+// 50-90 and 90-150 px out from the ink) rather than eyeballed.
+//
+// The merge is the part that matters: a lit phosphor dot is what it is, and the
+// halo is light scattered *around* it, so the glow has no business brightening
+// the dot. Weighting it by how dark the picture already is adds it only in the
+// surround — which is what puts a halo in the black around a clip instead of a
+// flat wash over it.
+
 static inline float crtRand(float2 co) {
     return fract(sin(dot(co, float2(12.9898, 78.233))) * 43758.5453);
 }
@@ -44,6 +55,23 @@ static inline float3 crtSample(sampler samp, float2 tc, float w, float h) {
     float2 p = float2(tc.x * w, (1.0 - tc.y) * h);
     float3 s = pow(abs(samp.sample(samp.transform(p)).rgb), float3(2.2));
     return s * float3(1.25);
+}
+
+/// Keep only what is bright enough to bloom. A soft knee rather than a step, or
+/// the glow's own edge shows up as a contour around the picture.
+float4 phosphorThreshold(sample_t c, float threshold) {
+    float l = max(max(c.r, c.g), c.b);
+    float k = smoothstep(threshold, threshold + 0.25, l);
+    return float4(c.rgb * k, c.a);
+}
+
+/// Put the blurred copies *behind* the picture rather than over it.
+float4 phosphorMerge(sample_t base, sample_t tight, sample_t wide,
+                     float tightGain, float wideGain) {
+    float3 lit = clamp(base.rgb, 0.0, 1.0);
+    float3 halo = tight.rgb * tightGain + wide.rgb * wideGain;
+    float room = clamp(1.0 - max(max(lit.r, lit.g), lit.b), 0.0, 1.0);
+    return float4(clamp(lit + halo * room, 0.0, 1.0), 1.0);
 }
 
 /// `blur` is a pre-blurred copy of `src` — crtemu's blurbuffer, which is what

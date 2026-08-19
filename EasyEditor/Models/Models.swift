@@ -332,6 +332,9 @@ struct AestheticSettings: Codable, Equatable {
     var strength: Double = 0.85
     /// How much the picture spills light into the backdrop.
     var caustics: Double = 0.5
+    /// CRT only: the phosphor halo the picture throws into the surrounding
+    /// black, and the ghosting that comes with it.
+    var halo: Double = 0.8
     /// Camera takes usually shouldn't smear the room with their own glow.
     var excludeCameraTakes: Bool = true
 

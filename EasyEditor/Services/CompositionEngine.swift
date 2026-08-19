@@ -396,6 +396,7 @@ struct CompositionEngine {
                 params: Self.params(for: settings),
                 strength: settings.strength,
                 caustics: settings.caustics,
+                halo: settings.halo,
                 presetID: settings.presetID)
             : nil
 
