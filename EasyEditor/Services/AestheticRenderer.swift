@@ -32,19 +32,16 @@ struct AestheticParams: Equatable {
         }
         var params = AestheticParams()
         params.name = name
-        // ntsc-rs intensities are small fractions; scale them into 0…1 range.
+        // ntsc-rs intensities are small fractions; scale them into 0…1.
         params.grain = min(1, value("luma_noise_intensity", 0.01) * 25)
         params.chromaNoise = min(1, value("chroma_noise_intensity", 0.1) * 4)
         params.chromaBleed = min(1, value("vhs_chroma_loss", 0) * 3
-                                 + abs(value("chroma_delay_horizontal", 0)) * 0.4
-                                 + 0.2)
+                                 + abs(value("chroma_delay_horizontal", 0)) * 0.4 + 0.2)
         params.scanline = min(1, value("video_scanline_phase_shift", 0) / 3 + 0.25)
-        params.ringing = min(1, value("ringing_power", 2) / 8
-                             + value("vhs_sharpen", 0) / 4)
+        params.ringing = min(1, value("ringing_power", 2) / 8 + value("vhs_sharpen", 0) / 4)
         params.wobble = min(1, value("vhs_edge_wave", 0) / 4)
         params.wobbleSpeed = max(1, value("vhs_edge_wave_speed", 6))
-        params.snow = min(1, value("tracking_noise_noise_intensity", 0) * 0.8
-                          + value("composite_noise", 0) * 0.1)
+        params.snow = min(1, value("tracking_noise_noise_intensity", 0) * 0.8)
         params.tear = min(1, value("head_switching_height", 0) / 40)
         return params
     }
@@ -58,7 +55,6 @@ struct AestheticPreset: Identifiable, Equatable {
 }
 
 enum AestheticLibrary {
-    /// Loaded once; the JSON is a couple of KB each.
     static let presets: [AestheticPreset] = load()
 
     static func preset(id: String?) -> AestheticPreset? {
@@ -93,50 +89,87 @@ struct AestheticFrameConfig: Equatable {
 
 enum AestheticRenderer {
 
+    // MARK: - Safety
+
+    /// Generator filters take no input image, so they must be built directly:
+    /// CIImage.empty().applyingFilter(…) hands back an empty image for them,
+    /// and an empty image poisons everything composited afterwards — which
+    /// shows up as a completely black frame.
+    private static func generate(_ name: String, _ parameters: [String: Any]) -> CIImage? {
+        guard let output = CIFilter(name: name, parameters: parameters)?.outputImage,
+              !output.extent.isEmpty else { return nil }
+        return output
+    }
+
+    /// Adopt a step only if it produced something real. One filter failing
+    /// should cost a detail, never the picture.
+    private static func step(_ image: CIImage, _ transform: (CIImage) -> CIImage?) -> CIImage {
+        guard let candidate = transform(image), !candidate.extent.isEmpty else { return image }
+        return candidate
+    }
+
+    private static func fade(_ image: CIImage, _ alpha: CGFloat) -> CIImage {
+        image.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: alpha, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: alpha, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: alpha, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: alpha),
+        ])
+    }
+
+    private static func channel(_ image: CIImage, r: CGFloat, g: CGFloat, b: CGFloat) -> CIImage {
+        image.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: r, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: g, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: b, w: 0),
+            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+        ])
+    }
+
     // MARK: - Backdrop
 
     /// The ground the picture sits on: a dark field with the mode's glow,
-    /// scanlines, drifting snow, and a slow ghost of the picture itself.
+    /// drifting snow, scanlines, and a slow smeared ghost of the picture.
     static func backdrop(_ config: AestheticFrameConfig, canvas: CGRect,
                          time: Double, ghost: CIImage?) -> CIImage {
         let tint = config.mode.tint
-        let strength = config.strength
-        var image = CIImage(color: CIColor(red: 0.008, green: 0.008, blue: 0.012))
+        let strength = max(0, min(1, config.strength))
+        var image = CIImage(color: CIColor(red: 0.01, green: 0.01, blue: 0.014))
             .cropped(to: canvas)
 
         // Centre glow, like a tube warming the middle of the screen.
-        let glow = CIImage.empty().applyingFilter("CIRadialGradient", parameters: [
+        if let glow = generate("CIRadialGradient", [
             kCIInputCenterKey: CIVector(x: canvas.midX, y: canvas.midY),
             "inputRadius0": 0,
             "inputRadius1": max(canvas.width, canvas.height) * 0.72,
-            "inputColor0": CIColor(red: tint.r * strength, green: tint.g * strength,
+            "inputColor0": CIColor(red: tint.r * strength,
+                                   green: tint.g * strength,
                                    blue: tint.b * strength),
             "inputColor1": CIColor(red: 0, green: 0, blue: 0),
-        ]).cropped(to: canvas)
-        image = glow.applyingFilter("CIAdditionCompositing", parameters: [
-            kCIInputBackgroundImageKey: image,
-        ])
+        ])?.cropped(to: canvas) {
+            image = step(image) {
+                glow.applyingFilter("CIAdditionCompositing",
+                                    parameters: [kCIInputBackgroundImageKey: $0])
+                    .cropped(to: canvas)
+            }
+        }
 
         // A ghost of the picture, offset and smeared — the backdrop remembers
-        // the frame a beat late, which is what sells VHS.
-        if let ghost, config.mode != .none {
+        // the frame a beat late, which is what sells the analogue feel.
+        if let ghost {
             let drift = CGFloat(sin(time * 0.7)) * canvas.width * 0.012
             let lift = CGFloat(cos(time * 0.43)) * canvas.height * 0.006
             let smeared = ghost
                 .clampedToExtent()
                 .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 26])
-                .cropped(to: canvas)
                 .transformed(by: CGAffineTransform(translationX: drift, y: lift))
-            let alpha = CGFloat(0.22 * strength)
-            let faded = smeared.applyingFilter("CIColorMatrix", parameters: [
-                "inputRVector": CIVector(x: alpha, y: 0, z: 0, w: 0),
-                "inputGVector": CIVector(x: 0, y: alpha, z: 0, w: 0),
-                "inputBVector": CIVector(x: 0, y: 0, z: alpha, w: 0),
-                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: alpha),
-            ])
-            image = faded.applyingFilter("CIScreenBlendMode", parameters: [
-                kCIInputBackgroundImageKey: image,
-            ]).cropped(to: canvas)
+                .cropped(to: canvas)
+            let faded = fade(smeared, CGFloat(0.22 * strength))
+            image = step(image) {
+                faded.applyingFilter("CIScreenBlendMode",
+                                     parameters: [kCIInputBackgroundImageKey: $0])
+                    .cropped(to: canvas)
+            }
         }
 
         // The backdrop wears the treatment at full weight.
@@ -151,49 +184,50 @@ enum AestheticRenderer {
         let bloom = source
             .clampedToExtent()
             .applyingFilter("CIGaussianBlur", parameters: [
-                kCIInputRadiusKey: max(canvas.width, canvas.height) * 0.035,
+                kCIInputRadiusKey: max(canvas.width, canvas.height) * 0.03,
             ])
             .cropped(to: canvas)
-        let gain = CGFloat(amount)
-        return bloom.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: gain, y: 0, z: 0, w: 0),
-            "inputGVector": CIVector(x: 0, y: gain, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: gain, w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: gain * 0.85),
-        ])
+        guard !bloom.extent.isEmpty else { return nil }
+        return fade(bloom, CGFloat(min(1, amount)))
     }
 
     // MARK: - The treatment itself
 
-    /// `weight` 1 = the backdrop's full dose, ~0.35 = the lighter pass the
-    /// picture gets, so the whole frame reads as doused without the footage
+    /// `weight` 1 = the backdrop's full dose; ~0.38 = the lighter pass the
+    /// picture gets, so the frame reads as doused without the footage
     /// disappearing under it.
     static func treat(_ input: CIImage, _ config: AestheticFrameConfig,
                       canvas: CGRect, time: Double, weight: Double) -> CIImage {
         let p = config.params
-        let s = config.strength * weight
-        guard s > 0.01 else { return input }
+        let s = max(0, min(1, config.strength)) * weight
+        guard s > 0.01, !input.extent.isEmpty else { return input }
         var image = input
 
         // Chroma separation: red and blue pull apart along the line.
-        let bleed = CGFloat(p.chromaBleed * s * 6)
-        if bleed > 0.4 {
-            let red = channel(image, r: 1, g: 0, b: 0)
-                .transformed(by: CGAffineTransform(translationX: -bleed, y: 0))
-            let blue = channel(image, r: 0, g: 0, b: 1)
-                .transformed(by: CGAffineTransform(translationX: bleed, y: 0))
-            let green = channel(image, r: 0, g: 1, b: 0)
-            image = red
-                .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: green])
-                .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: blue])
-                .cropped(to: canvas)
+        let bleed = CGFloat(p.chromaBleed * s * 5)
+        if bleed > 0.5 {
+            image = step(image) { source in
+                let red = channel(source, r: 1, g: 0, b: 0)
+                    .transformed(by: CGAffineTransform(translationX: -bleed, y: 0))
+                let green = channel(source, r: 0, g: 1, b: 0)
+                let blue = channel(source, r: 0, g: 0, b: 1)
+                    .transformed(by: CGAffineTransform(translationX: bleed, y: 0))
+                return red
+                    .applyingFilter("CIAdditionCompositing",
+                                    parameters: [kCIInputBackgroundImageKey: green])
+                    .applyingFilter("CIAdditionCompositing",
+                                    parameters: [kCIInputBackgroundImageKey: blue])
+                    .cropped(to: canvas)
+            }
         }
 
-        // Ringing: the overshoot around hard edges on analogue gear.
+        // Ringing: the overshoot analogue gear leaves around hard edges.
         if p.ringing * s > 0.05 {
-            image = image.applyingFilter("CISharpenLuminance", parameters: [
-                kCIInputSharpnessKey: p.ringing * s * 1.6,
-            ])
+            image = step(image) {
+                $0.applyingFilter("CISharpenLuminance", parameters: [
+                    kCIInputSharpnessKey: p.ringing * s * 1.5,
+                ]).cropped(to: canvas)
+            }
         }
 
         // Tape wobble: the frame breathes sideways.
@@ -201,9 +235,11 @@ enum AestheticRenderer {
         if wobble > 0.3 {
             let shift = wobble * CGFloat(sin(time * p.wobbleSpeed)
                                          + 0.4 * sin(time * p.wobbleSpeed * 2.7))
-            image = image.clampedToExtent()
-                .transformed(by: CGAffineTransform(translationX: shift, y: 0))
-                .cropped(to: canvas)
+            image = step(image) {
+                $0.clampedToExtent()
+                    .transformed(by: CGAffineTransform(translationX: shift, y: 0))
+                    .cropped(to: canvas)
+            }
         }
 
         // Head-switch tear: the bottom band slips out of line.
@@ -212,80 +248,72 @@ enum AestheticRenderer {
             let band = CGRect(x: canvas.minX, y: canvas.minY,
                               width: canvas.width, height: bandHeight)
             let slip = CGFloat(6 + 26 * p.tear * s) * CGFloat(sin(time * 3.1) * 0.5 + 0.5)
-            let torn = image.cropped(to: band)
-                .transformed(by: CGAffineTransform(translationX: slip, y: 0))
-                .cropped(to: band)
-            image = torn.composited(over: image)
+            image = step(image) { source in
+                let torn = source.cropped(to: band)
+                    .transformed(by: CGAffineTransform(translationX: slip, y: 0))
+                    .cropped(to: band)
+                guard !torn.extent.isEmpty else { return nil }
+                return torn.composited(over: source).cropped(to: canvas)
+            }
         }
 
         // Scanlines.
         if p.scanline * s > 0.03 {
             let lineHeight = max(1.5, canvas.height / 480)
-            let dark = CGFloat(1 - min(0.65, p.scanline * s * 0.8))
-            let stripes = CIImage.empty().applyingFilter("CIStripesGenerator", parameters: [
+            let dark = CGFloat(1 - min(0.6, p.scanline * s * 0.7))
+            if let stripes = generate("CIStripesGenerator", [
                 kCIInputCenterKey: CIVector(x: 0, y: 0),
                 "inputColor0": CIColor(red: 1, green: 1, blue: 1),
                 "inputColor1": CIColor(red: dark, green: dark, blue: dark),
                 kCIInputWidthKey: lineHeight,
                 kCIInputSharpnessKey: 0.6,
-            ])
-            .transformed(by: CGAffineTransform(rotationAngle: .pi / 2))
-            .cropped(to: canvas)
-            image = image.applyingFilter("CIMultiplyBlendMode", parameters: [
-                kCIInputBackgroundImageKey: stripes,
-            ]).cropped(to: canvas)
+            ])?
+                .transformed(by: CGAffineTransform(rotationAngle: .pi / 2))
+                .cropped(to: canvas), !stripes.extent.isEmpty {
+                image = step(image) {
+                    $0.applyingFilter("CIMultiplyBlendMode",
+                                      parameters: [kCIInputBackgroundImageKey: stripes])
+                        .cropped(to: canvas)
+                }
+            }
         }
 
         // Grain and snow, drifting frame to frame.
         let noiseAmount = (p.grain * 0.5 + p.snow) * s
-        if noiseAmount > 0.02 {
+        if noiseAmount > 0.02,
+           let random = generate("CIRandomGenerator", [:]) {
             let jitterX = CGFloat((time * 137).truncatingRemainder(dividingBy: 512))
             let jitterY = CGFloat((time * 271).truncatingRemainder(dividingBy: 512))
-            var noise = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5))
+            let noise = random
+                .transformed(by: CGAffineTransform(translationX: jitterX, y: jitterY))
                 .cropped(to: canvas)
-            if let random = CIFilter(name: "CIRandomGenerator")?.outputImage {
-                noise = random
-                    .transformed(by: CGAffineTransform(translationX: jitterX, y: jitterY))
+                .applyingFilter("CIColorControls", parameters: [
+                    kCIInputSaturationKey: p.chromaNoise,
+                ])
+            let faded = fade(noise, CGFloat(min(0.3, noiseAmount * 0.35)))
+            image = step(image) {
+                faded.applyingFilter("CIScreenBlendMode",
+                                     parameters: [kCIInputBackgroundImageKey: $0])
                     .cropped(to: canvas)
             }
-            let grey = noise.applyingFilter("CIColorControls", parameters: [
-                kCIInputSaturationKey: p.chromaNoise,
-                kCIInputBrightnessKey: 0,
-                kCIInputContrastKey: 1,
-            ])
-            let a = CGFloat(min(0.35, noiseAmount * 0.4))
-            let faded = grey.applyingFilter("CIColorMatrix", parameters: [
-                "inputRVector": CIVector(x: a, y: 0, z: 0, w: 0),
-                "inputGVector": CIVector(x: 0, y: a, z: 0, w: 0),
-                "inputBVector": CIVector(x: 0, y: 0, z: a, w: 0),
-                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: a),
-            ])
-            image = faded.applyingFilter("CIScreenBlendMode", parameters: [
-                kCIInputBackgroundImageKey: image,
-            ]).cropped(to: canvas)
         }
 
-        // CRT glass: a little bloom and a vignette to round the corners off.
+        // CRT glass: a little bloom, then a vignette to round the corners off.
         if config.mode == .crt {
-            image = image.applyingFilter("CIBloom", parameters: [
-                kCIInputIntensityKey: 0.35 * s,
-                kCIInputRadiusKey: 8,
+            image = step(image) {
+                $0.applyingFilter("CIBloom", parameters: [
+                    kCIInputIntensityKey: 0.35 * s,
+                    kCIInputRadiusKey: 8,
+                ]).cropped(to: canvas)
+            }
+        }
+        image = step(image) {
+            $0.applyingFilter("CIVignette", parameters: [
+                kCIInputIntensityKey: 0.8 * s,
+                kCIInputRadiusKey: 1.7,
             ]).cropped(to: canvas)
         }
-        image = image.applyingFilter("CIVignette", parameters: [
-            kCIInputIntensityKey: 0.9 * s,
-            kCIInputRadiusKey: 1.6,
-        ]).cropped(to: canvas)
 
         return image.cropped(to: canvas)
-    }
-
-    private static func channel(_ image: CIImage, r: CGFloat, g: CGFloat, b: CGFloat) -> CIImage {
-        image.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: r, y: 0, z: 0, w: 0),
-            "inputGVector": CIVector(x: 0, y: g, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: b, w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
-        ])
     }
 }
