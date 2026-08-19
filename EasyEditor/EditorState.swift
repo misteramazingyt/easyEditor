@@ -28,6 +28,8 @@ final class EditorState: ObservableObject {
     @Published private(set) var isProcessing = false
     /// What the processing overlay should say, when it isn't a clip edit.
     @Published private(set) var processingNote: String?
+    /// Last composition build, for diagnosing a blank preview.
+    @Published private(set) var buildSummary: String = "—"
     /// Non-nil while auto b-roll runs; shows staged progress.
     @Published private(set) var autoBRollStatus: String?
 
@@ -161,9 +163,11 @@ final class EditorState: ObservableObject {
                 let built = try await self.engine.build(project: snapshot, overlayImages: overlays)
                 guard !Task.isCancelled else { return }
                 self.playback.install(built)
+                self.buildSummary = built.summary
             } catch CompositionEngine.EngineError.noVideoContent {
                 guard !Task.isCancelled else { return }
                 self.playback.install(nil)
+                self.buildSummary = "nothing to show"
             } catch {
                 guard !Task.isCancelled else { return }
                 self.playback.install(nil)
@@ -241,6 +245,7 @@ final class EditorState: ObservableObject {
                     break
                 }
             }
+            await ensureStorylineBase()
             isImporting = false
             if succeeded == 0 {
                 errorMessage = "Couldn't import the selected item\(items.count == 1 ? "" : "s"). "
@@ -307,6 +312,7 @@ final class EditorState: ObservableObject {
         clip.laneIndex = freeStackIndex(for: clip, desired: 1)
         project.append(clip)
         selectedClipID = clip.id
+        Task { await ensureStorylineBase() }
         showToast("Screenshot added")
         return true
     }
@@ -325,6 +331,7 @@ final class EditorState: ObservableObject {
             clip.laneIndex = freeStackIndex(for: clip, desired: 1)
             project.append(clip)
             selectedClipID = clip.id
+            await ensureStorylineBase()
             showToast("Image added")
             return true
         } catch {
@@ -778,6 +785,15 @@ final class EditorState: ObservableObject {
         clip.isPlaceholder = true
         clip.isMuted = true
         project.append(clip)
+    }
+
+    /// Stills carry no track media, so a project made only of pictures has no
+    /// storyline to play. Give it the same black base a take gets — an
+    /// ordinary primary clip, on the path that is known to render.
+    func ensureStorylineBase() async {
+        guard project.primaryClips.isEmpty,
+              project.clips.contains(where: { $0.isVisual }) else { return }
+        await addPlaceholder(length: max(1, project.duration), at: 0)
     }
 
     var selectedIsPlaceholder: Bool {

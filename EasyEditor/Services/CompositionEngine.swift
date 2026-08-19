@@ -8,6 +8,9 @@ struct BuiltComposition {
     let videoComposition: AVMutableVideoComposition?
     let audioMix: AVMutableAudioMix?
     let duration: Double
+    /// What the build actually contains — surfaced in the UI so a blank
+    /// preview can be diagnosed without a debugger.
+    var summary: String = ""
 }
 
 /// Translates a `VideoProject` into an AVMutableComposition plus custom
@@ -231,10 +234,16 @@ struct CompositionEngine {
         let audioMix = AVMutableAudioMix()
         audioMix.inputParameters = mixParams
 
+        let stills = overlayClips.count
+        let instructionCount = videoComposition?.instructions.count ?? 0
+        let summary = "\(String(format: "%.1f", composition.duration.seconds))s · "
+            + "\(placed.count) video · \(stills) still · \(instructionCount) steps"
+            + (fillerTrackID != nil ? " · filler" : "")
         return BuiltComposition(composition: composition,
                                 videoComposition: videoComposition,
                                 audioMix: audioMix,
-                                duration: composition.duration.seconds)
+                                duration: composition.duration.seconds,
+                                summary: summary)
     }
 
     /// Pre-render every image/title clip once; the compositor stamps these per frame.

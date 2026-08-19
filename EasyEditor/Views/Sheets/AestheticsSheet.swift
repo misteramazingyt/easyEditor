@@ -21,6 +21,13 @@ struct AestheticsSheet: View {
                         strengthSection
                         causticsSection
                     }
+                    VStack(spacing: 4) {
+                        label("Preview build")
+                        Text(editor.buildSummary)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
