@@ -391,7 +391,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         // The picture takes a lighter dose than the ground it sits on.
         if let aesthetic = instruction.aesthetic {
             result = AestheticRenderer.treat(result, aesthetic, canvas: canvas,
-                                             time: time, weight: 0.38)
+                                             time: time, weight: 0.55)
         }
 
         ciContext.render(result, to: output, bounds: canvas,

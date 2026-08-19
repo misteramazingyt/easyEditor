@@ -16,8 +16,10 @@ struct AestheticsSheet: View {
             ScrollView {
                 VStack(spacing: 20) {
                     modeSection
-                    if settings.mode != .none {
+                    if settings.mode == .ntsc {
                         presetSection
+                    }
+                    if settings.mode != .none {
                         strengthSection
                         causticsSection
                     }
@@ -61,11 +63,18 @@ struct AestheticsSheet: View {
                     modeTile(mode)
                 }
             }
-            Text(settings.mode == .none
-                 ? "No treatment — the canvas stays black."
-                 : "The backdrop wears it fully; the picture takes a lighter pass.")
+            Text(modeBlurb)
                 .font(.caption2).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var modeBlurb: String {
+        switch settings.mode {
+        case .none: return "No treatment — the canvas stays black."
+        case .crt: return "Hard scanlines, aperture grille and phosphor glow."
+        case .vhs: return "Smeared colour, unstable line, head-switch tear."
+        case .ntsc: return "Broadcast signal: dot crawl and ringing, set by the preset below."
         }
     }
 

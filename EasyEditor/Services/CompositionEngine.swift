@@ -271,6 +271,17 @@ struct CompositionEngine {
         return result
     }
 
+    /// CRT and VHS are their own looks; the ntsc-rs presets belong to NTSC.
+    private static func params(for settings: AestheticSettings) -> AestheticParams {
+        switch settings.mode {
+        case .crt: return .crt
+        case .vhs: return .vhs
+        case .ntsc: return AestheticLibrary.preset(id: settings.presetID)?.params
+            ?? AestheticParams()
+        case .none: return AestheticParams()
+        }
+    }
+
     // MARK: - Black canvas filler
 
     /// Insert a looping black clip so a storyline with no video still has a
@@ -382,8 +393,7 @@ struct CompositionEngine {
         let aesthetic: AestheticFrameConfig? = settings.isActive
             ? AestheticFrameConfig(
                 mode: settings.mode,
-                params: AestheticLibrary.preset(id: settings.presetID)?.params
-                    ?? AestheticParams(),
+                params: Self.params(for: settings),
                 strength: settings.strength,
                 caustics: settings.caustics)
             : nil

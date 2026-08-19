@@ -22,6 +22,20 @@ struct AestheticParams: Equatable {
     var snow: Double = 0.2          // tracking noise
     var tear: Double = 0.2          // head-switch band at the bottom
 
+    /// Glassy tube: hard scanlines, aperture grille, phosphor bloom, no tape
+    /// faults at all.
+    static let crt = AestheticParams(
+        name: "CRT", grain: 0.12, chromaNoise: 0.1, chromaBleed: 0.18,
+        scanline: 1.0, ringing: 0.55, wobble: 0, wobbleSpeed: 1,
+        snow: 0.04, tear: 0)
+
+    /// Tape: smeared colour, unstable line, head-switch tear, dirty picture,
+    /// and no fine scanlines to speak of.
+    static let vhs = AestheticParams(
+        name: "VHS", grain: 0.5, chromaNoise: 0.55, chromaBleed: 0.8,
+        scanline: 0.12, ringing: 0.2, wobble: 0.75, wobbleSpeed: 5.5,
+        snow: 0.45, tear: 0.7)
+
     /// Read the fields we can emulate out of an ntsc-rs preset.
     static func from(presetJSON json: [String: Any], name: String) -> AestheticParams {
         func value(_ key: String, _ fallback: Double) -> Double {
@@ -298,14 +312,69 @@ enum AestheticRenderer {
             }
         }
 
-        // CRT glass: a little bloom, then a vignette to round the corners off.
-        if config.mode == .crt {
+        switch config.mode {
+        case .crt:
+            // Aperture grille: fine vertical mask under the scanlines.
+            let cell = max(2.0, canvas.width / 420)
+            let dim = CGFloat(1 - min(0.35, 0.4 * s))
+            if let grille = generate("CIStripesGenerator", [
+                kCIInputCenterKey: CIVector(x: 0, y: 0),
+                "inputColor0": CIColor(red: 1, green: 1, blue: 1),
+                "inputColor1": CIColor(red: dim, green: dim, blue: dim),
+                kCIInputWidthKey: cell,
+                kCIInputSharpnessKey: 0.35,
+            ])?.cropped(to: canvas) {
+                image = step(image) {
+                    $0.applyingFilter("CIMultiplyBlendMode",
+                                      parameters: [kCIInputBackgroundImageKey: grille])
+                        .cropped(to: canvas)
+                }
+            }
+            // Phosphor glow.
             image = step(image) {
                 $0.applyingFilter("CIBloom", parameters: [
-                    kCIInputIntensityKey: 0.35 * s,
-                    kCIInputRadiusKey: 8,
+                    kCIInputIntensityKey: 0.9 * s,
+                    kCIInputRadiusKey: 12,
                 ]).cropped(to: canvas)
             }
+
+        case .vhs:
+            // Chroma smear: colour dragged sideways off the luma, which is
+            // the single most recognisable thing tape does.
+            let smear = CGFloat(6 + 26 * s)
+            image = step(image) { source in
+                let dragged = source.clampedToExtent()
+                    .applyingFilter("CIMotionBlur", parameters: [
+                        kCIInputRadiusKey: smear,
+                        kCIInputAngleKey: 0,
+                    ])
+                    .cropped(to: canvas)
+                return dragged.applyingFilter("CIColorBlendMode",
+                                              parameters: [kCIInputBackgroundImageKey: source])
+                    .cropped(to: canvas)
+            }
+            // Tape softens the whole picture and drops saturation.
+            image = step(image) {
+                $0.applyingFilter("CIColorControls", parameters: [
+                    kCIInputSaturationKey: 1 - 0.22 * s,
+                    kCIInputContrastKey: 1 + 0.1 * s,
+                ]).cropped(to: canvas)
+            }
+
+        case .ntsc:
+            // Dot crawl: chroma shimmering along the line, frame to frame.
+            let crawl = CGFloat(2 + 7 * s) * CGFloat(sin(time * 9) * 0.5 + 0.5)
+            image = step(image) { source in
+                let shifted = source.clampedToExtent()
+                    .transformed(by: CGAffineTransform(translationX: crawl, y: 0))
+                    .cropped(to: canvas)
+                return shifted.applyingFilter("CIColorBlendMode",
+                                              parameters: [kCIInputBackgroundImageKey: source])
+                    .cropped(to: canvas)
+            }
+
+        case .none:
+            break
         }
         image = step(image) {
             $0.applyingFilter("CIVignette", parameters: [
