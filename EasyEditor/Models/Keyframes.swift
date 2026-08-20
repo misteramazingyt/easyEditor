@@ -76,7 +76,8 @@ struct Keyframe<Value: KeyframeValue>: Codable, Equatable, Identifiable {
     var id = UUID()
     var time: Double
     var value: Value
-    /// Shapes the segment *leaving* this key. The last key's easing is unused.
+    /// This key's own shape, used at both its ends: how the move leaves here
+    /// for the next key, and how the move from the previous one arrives.
     var easing: EasingCurve = .sine
     /// Bezier control points for the *path*, as unit-canvas offsets from this
     /// key's own centre. Only the motion track uses them; nil means the curve
@@ -109,7 +110,8 @@ struct KeyframeTrack<Value: KeyframeValue>: Codable, Equatable {
             guard time >= a.time, time <= b.time else { continue }
             let span = b.time - a.time
             guard span > 0.0001 else { return b.value }
-            let p = MotionEvaluator.eased(a.easing, (time - a.time) / span)
+            let p = MotionEvaluator.eased(from: a.easing, to: b.easing,
+                                          (time - a.time) / span)
             return Value.interpolate(a.value, b.value, p)
         }
         return last.value
@@ -123,21 +125,13 @@ struct KeyframeTrack<Value: KeyframeValue>: Codable, Equatable {
         index(at: time).map { keys[$0] }
     }
 
-    /// The key whose easing shapes the movement happening at this moment.
-    ///
-    /// A key's easing shapes the segment *leaving* it, so the last key's own
-    /// easing is never used — parking on it and picking a curve would appear
-    /// to do nothing at all. Sitting on the final key means the segment that
-    /// matters is the one arriving there, which the key before it owns.
+    /// The key whose shape a curve picked at this moment should change: the
+    /// one being sat on, or the one the current segment left. Every key's
+    /// easing is read at both its ends, so there is no dead one to fall off.
     func governingIndex(at time: Double) -> Int? {
-        guard keys.count > 1 else { return keys.isEmpty ? nil : 0 }
-        if let exact = index(at: time) {
-            return exact == keys.count - 1 ? exact - 1 : exact
-        }
-        if let behind = keys.lastIndex(where: { $0.time < time }) {
-            return min(behind, keys.count - 2)
-        }
-        return 0
+        guard !keys.isEmpty else { return nil }
+        if let exact = index(at: time) { return exact }
+        return keys.lastIndex { $0.time < time } ?? 0
     }
 
     func marker(at time: Double) -> KeyframeMarker {
@@ -302,7 +296,8 @@ extension KeyframeTrack where Value == ClipTransform {
             guard time >= a.time, time <= b.time else { continue }
             let span = b.time - a.time
             guard span > 0.0001 else { return b.value }
-            let p = MotionEvaluator.eased(a.easing, (time - a.time) / span)
+            let p = MotionEvaluator.eased(from: a.easing, to: b.easing,
+                                          (time - a.time) / span)
             var value = ClipTransform.interpolate(a.value, b.value, p)
             let point = Self.bezier(a.value.center, outControl(i),
                                     inControl(i + 1), b.value.center, p)

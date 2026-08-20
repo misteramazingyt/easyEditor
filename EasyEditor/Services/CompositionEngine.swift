@@ -576,16 +576,7 @@ struct CompositionEngine {
         let videoComposition = AVMutableVideoComposition()
         videoComposition.customVideoCompositorClass = LayeredCompositor.self
         videoComposition.instructions = instructions
-        // A hard curve — expo especially — puts most of its travel into a
-        // couple of frames, and at 30 that reads as a stutter rather than a
-        // move. Render at 60 unless an aesthetic is on, where every frame
-        // costs a pass of real signal processing and 30 is the honest ceiling.
-        let animated = project.clips.contains {
-            $0.motionKeys?.isActive == true || $0.inOut?.isEnabled == true
-                || ($0.loopFx?.preset ?? .none) != .none
-        }
-        let fps: CMTimeScale = (settings.isActive || !animated) ? 30 : 60
-        videoComposition.frameDuration = CMTime(value: 1, timescale: fps)
+        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
         videoComposition.renderSize = renderSize
         return videoComposition
     }

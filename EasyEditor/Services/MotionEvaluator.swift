@@ -49,20 +49,34 @@ enum MotionEvaluator {
         return n1 * t * t + 0.984375
     }
 
-    /// Combined curve: `inCurve` shapes the first half, `outCurve` the back
-    /// half (the classic in/out split).
-    static func combined(_ t: Double, in inCurve: EasingCurve, out outCurve: EasingCurve) -> Double {
-        let t = min(1, max(0, t))
-        if t < 0.5 {
-            return easeIn(inCurve, t * 2) / 2
-        }
-        return 1 - easeIn(outCurve, (1 - t) * 2) / 2
+    /// Ease-out form: the same curve read backwards.
+    static func easeOut(_ curve: EasingCurve, _ t: Double) -> Double {
+        1 - easeIn(curve, 1 - min(1, max(0, t)))
     }
 
-    /// The shape a keyframe segment takes: the classic in/out S-curve, so a
-    /// key eases out of the one behind it and into the one ahead.
-    static func eased(_ curve: EasingCurve, _ t: Double) -> Double {
-        combined(t, in: curve, out: curve)
+    /// One curve for the whole move, crossfading from the departure shape into
+    /// the arrival shape.
+    ///
+    /// The obvious construction — `inCurve` over the first half, `outCurve`
+    /// over the second — is what most easing tables do, and it is wrong here.
+    /// It pins the curve through the midpoint, so each half has to cover half
+    /// the distance in half the time whatever its shape: expo against expo
+    /// becomes a near-vertical step through the middle, and "none in, expo
+    /// out" is linear only to the halfway mark and then lurches.
+    ///
+    /// Weighting the two by `t` instead lets each one describe the whole move
+    /// and hands authority over gradually. None into expo then reads as a
+    /// straight climb that bends over and settles, which is the shape you
+    /// actually draw when you ask for it.
+    static func combined(_ t: Double, in inCurve: EasingCurve, out outCurve: EasingCurve) -> Double {
+        let t = min(1, max(0, t))
+        return (1 - t) * easeIn(inCurve, t) + t * easeOut(outCurve, t)
+    }
+
+    /// The shape of one keyframe segment: it leaves `from` the way that key
+    /// says to and arrives at `to` the way that one does.
+    static func eased(from: EasingCurve, to: EasingCurve, _ t: Double) -> Double {
+        combined(t, in: from, out: to)
     }
 
     // MARK: - Per-frame motion state
