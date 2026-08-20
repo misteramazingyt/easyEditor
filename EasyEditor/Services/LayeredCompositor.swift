@@ -125,7 +125,12 @@ final class CompositorInstruction: NSObject, AVVideoCompositionInstructionProtoc
 final class LayeredCompositor: NSObject, AVVideoCompositing {
 
     private let queue = DispatchQueue(label: "com.easyeditor.compositor")
-    private let ciContext = CIContext(options: [.cacheIntermediates: false])
+    /// Shared, not per-instance: AVFoundation builds a fresh compositor every
+    /// time a video composition is assigned to the player item, and a live
+    /// drag does that on every frame it refreshes. A CIContext each time would
+    /// cost more than the render it was made for.
+    private static let sharedContext = CIContext(options: [.cacheIntermediates: false])
+    private var ciContext: CIContext { Self.sharedContext }
     private var renderContext: AVVideoCompositionRenderContext?
 
     var sourcePixelBufferAttributes: [String: Any]? {
