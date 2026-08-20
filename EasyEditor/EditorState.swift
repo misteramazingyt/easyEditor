@@ -52,6 +52,8 @@ final class EditorState: ObservableObject {
     /// references a file that doesn't exist yet, so saving and rebuilding wait.
     private var suppressPipeline = false
     private var liveClipID: UUID?
+    /// The layer the last take went on, so the next one joins it.
+    private var lastRecordingLane: Int?
     private var liveTimer: Timer?
     private var isDirty = false
     private var autosaveTask: Task<Void, Never>?
@@ -705,7 +707,8 @@ final class EditorState: ObservableObject {
                                 offset: playback.currentTime)
         clip.isLiveRecording = true
         clip.isCameraTake = true
-        clip.laneIndex = max(1, project.maxStackAbove + 1)
+        clip.laneIndex = recordingLane(startingAt: playback.currentTime)
+        lastRecordingLane = clip.laneIndex
         project.append(clip)
         liveClipID = clip.id
         selectedClipID = nil
@@ -719,6 +722,28 @@ final class EditorState: ObservableObject {
         // throw the playhead back to zero.
         playback.resume()
         Haptics.drop()
+    }
+
+    /// Where the next take goes.
+    ///
+    /// Recording twice in a row should carry on down the same layer, the way
+    /// a second shot goes on the same roll — a new layer each time buries the
+    /// timeline in stripes for no reason. A layer is only skipped when
+    /// something is already sitting on it at or after this point.
+    private func recordingLane(startingAt time: Double) -> Int {
+        var candidates: [Int] = []
+        if let lastRecordingLane { candidates.append(lastRecordingLane) }
+        candidates += project.clips
+            .filter { $0.isCameraTake == true && $0.stackIndex >= 1 }
+            .map(\.stackIndex)
+            .sorted()
+        for lane in candidates where lane >= 1 {
+            let occupied = project.clips(stackedAt: lane).contains { clip in
+                project.start(of: clip) + clip.effectiveDuration > time + 0.01
+            }
+            if !occupied { return lane }
+        }
+        return max(1, project.maxStackAbove + 1)
     }
 
     private func growLiveClip() {
