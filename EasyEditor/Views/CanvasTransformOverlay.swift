@@ -4,32 +4,26 @@ import SwiftUI
 /// thin outline with eight blue handles, a crosshair at the centre to drag the
 /// layer by, and a stalk out to the right to turn it.
 ///
-/// When the layer is animating, its path is drawn through the keyframes in
-/// red — a chevron at the first, a triangle at the last, diamonds between.
-/// Tap a keyframe to work on it: drag the diamond to move where the layer is
-/// at that moment, or its handles to bend the curve either side.
-///
 /// Everything is drawn from the numbers the compositor renders with, mapped
 /// through the letterboxed canvas rect, so what you grab is where the picture
-/// actually is.
+/// actually is rather than where the view happens to put a thumbnail.
+///
+/// While a handle is held the framing goes to the live store rather than the
+/// project: the compositor reads it ahead of its instructions and the player
+/// re-renders the frame it is on, so nothing rebuilds until the finger lifts.
 struct CanvasTransformOverlay: View {
     @EnvironmentObject private var editor: EditorState
 
     @State private var gesture: Gesture?
     @State private var didPushUndo = false
     /// The framing being dragged. Held here rather than written to the project
-    /// on every event: the box is drawn from it and the compositor reads it
-    /// through the live store, so nothing rebuilds until the finger lifts.
+    /// on every event, so the box and the picture come off the same number.
     @State private var dragging: (id: UUID, value: ClipTransform)?
-    /// The keyframe whose spline handles are showing.
-    @State private var activeKey: UUID?
 
     private enum Gesture: Equatable {
         case move(startCenter: CGPoint)
         case scale(handle: Handle, startScale: Double, startHeight: Double)
         case rotate(startRotation: Double, startAngle: Double)
-        case key(id: UUID)
-        case tangent(id: UUID, outgoing: Bool)
     }
 
     /// The eight box handles, by where they sit.
@@ -58,7 +52,6 @@ struct CanvasTransformOverlay: View {
 
     private let handleSize: CGFloat = 11
     private let fcpBlue = Color(red: 0.16, green: 0.55, blue: 1.0)
-    private let pathRed = Color(red: 0.94, green: 0.25, blue: 0.22)
 
     var body: some View {
         GeometryReader { geo in
@@ -68,20 +61,12 @@ struct CanvasTransformOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture { point in select(at: point, canvas: canvas) }
 
-                if let clip = editor.selectedClip, clip.isVisual {
-                    if let box = screenFrame(of: clip, canvas: canvas) {
-                        boxView(clip: clip, box: box, canvas: canvas)
-                    }
-                    // Over the box, not under it: a keyframe sitting inside the
-                    // layer has to stay grabbable, and the box takes the whole
-                    // of its own area.
-                    if let keys = clip.motionKeys, keys.keys.count > 1 {
-                        motionPath(clip: clip, keys: keys, canvas: canvas)
-                    }
+                if let clip = editor.selectedClip, clip.isVisual,
+                   let box = screenFrame(of: clip, canvas: canvas) {
+                    boxView(clip: clip, box: box, canvas: canvas)
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
-            .onChange(of: editor.selectedClipID) { _, _ in activeKey = nil }
         }
     }
 
@@ -116,12 +101,6 @@ struct CanvasTransformOverlay: View {
                       width: frame.width * scale, height: frame.height * scale)
     }
 
-    /// Unit canvas point → view point, and back.
-    private func toScreen(_ unit: CGPoint, canvas: CGRect) -> CGPoint {
-        CGPoint(x: canvas.minX + unit.x * canvas.width,
-                y: canvas.minY + unit.y * canvas.height)
-    }
-
     private func toUnit(_ point: CGPoint, canvas: CGRect) -> CGPoint {
         CGPoint(x: (point.x - canvas.minX) / max(1, canvas.width),
                 y: (point.y - canvas.minY) / max(1, canvas.height))
@@ -140,125 +119,6 @@ struct CanvasTransformOverlay: View {
         } else {
             editor.selectedClipID = nil
         }
-    }
-
-    // MARK: - The motion path
-
-    @ViewBuilder
-    private func motionPath(clip: TimelineClip, keys: KeyframeTrack<ClipTransform>,
-                            canvas: CGRect) -> some View {
-        let points = keys.pathPoints(project: { toScreen($0, canvas: canvas) })
-        ZStack(alignment: .topLeading) {
-            Path { path in
-                guard let first = points.first else { return }
-                path.move(to: first)
-                for point in points.dropFirst() { path.addLine(to: point) }
-            }
-            .stroke(pathRed, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-            .shadow(color: .black.opacity(0.6), radius: 1)
-            .allowsHitTesting(false)
-
-            ForEach(Array(keys.keys.enumerated()), id: \.element.id) { index, key in
-                keyMarker(clip: clip, keys: keys, key: key, index: index, canvas: canvas)
-            }
-
-            if let activeKey, let index = keys.keys.firstIndex(where: { $0.id == activeKey }) {
-                tangentHandles(clip: clip, keys: keys, index: index, canvas: canvas)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func keyMarker(clip: TimelineClip, keys: KeyframeTrack<ClipTransform>,
-                           key: Keyframe<ClipTransform>, index: Int,
-                           canvas: CGRect) -> some View {
-        let at = toScreen(key.value.center, canvas: canvas)
-        let isFirst = index == 0
-        let isLast = index == keys.keys.count - 1
-        let onPlayhead = abs(key.time - editor.localTime(of: clip)) <= KeyframeTrack<ClipTransform>.snap
-        let tint: Color = onPlayhead ? Color(red: 0.20, green: 0.85, blue: 0.80) : .white
-        Group {
-            if isFirst {
-                // Where the move begins: Final Cut's chevron.
-                Chevron().fill(tint).frame(width: 11, height: 13)
-            } else if isLast {
-                Triangle().fill(tint).frame(width: 12, height: 12)
-            } else {
-                Diamond().fill(tint).frame(width: 11, height: 11)
-            }
-        }
-        .overlay {
-            if activeKey == key.id {
-                Circle().strokeBorder(pathRed, lineWidth: 1.5).frame(width: 20, height: 20)
-            }
-        }
-        .shadow(color: .black.opacity(0.7), radius: 1)
-        .contentShape(Rectangle().inset(by: -12))
-        .position(at)
-        .gesture(keyGesture(clip: clip, key: key, canvas: canvas))
-    }
-
-    /// Two round handles either side of the key, joined by a thin line —
-    /// dragging one bends the curve and mirrors the other.
-    @ViewBuilder
-    private func tangentHandles(clip: TimelineClip, keys: KeyframeTrack<ClipTransform>,
-                                index: Int, canvas: CGRect) -> some View {
-        let key = keys.keys[index]
-        let centre = toScreen(key.value.center, canvas: canvas)
-        let outAt = toScreen(keys.outControl(index), canvas: canvas)
-        let inAt = toScreen(keys.inControl(index), canvas: canvas)
-        Path { path in
-            path.move(to: inAt)
-            path.addLine(to: centre)
-            path.addLine(to: outAt)
-        }
-        .stroke(.white.opacity(0.8), lineWidth: 1)
-        .allowsHitTesting(false)
-
-        tangentHandle(at: inAt, clip: clip, key: key.id, outgoing: false, canvas: canvas)
-        tangentHandle(at: outAt, clip: clip, key: key.id, outgoing: true, canvas: canvas)
-    }
-
-    private func tangentHandle(at point: CGPoint, clip: TimelineClip, key: UUID,
-                               outgoing: Bool, canvas: CGRect) -> some View {
-        Circle()
-            .fill(.white)
-            .frame(width: 9, height: 9)
-            .overlay(Circle().strokeBorder(pathRed, lineWidth: 1.2))
-            .contentShape(Rectangle().inset(by: -14))
-            .position(point)
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        beginKeyEdit()
-                        gesture = .tangent(id: key, outgoing: outgoing)
-                        editor.setMotionTangent(clip.id, key: key, outgoing: outgoing,
-                                                to: toUnit(value.location, canvas: canvas))
-                    }
-                    .onEnded { _ in finish() }
-            )
-    }
-
-    private func keyGesture(clip: TimelineClip, key: Keyframe<ClipTransform>,
-                            canvas: CGRect) -> some SwiftUI.Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                if value.translation == .zero { return }
-                beginKeyEdit()
-                gesture = .key(id: key.id)
-                editor.moveMotionKey(clip.id, key: key.id,
-                                     to: toUnit(value.location, canvas: canvas))
-            }
-            .onEnded { value in
-                // A tap rather than a drag: take up this keyframe, and put the
-                // playhead on it so the viewer shows the frame it belongs to.
-                if abs(value.translation.width) < 4 && abs(value.translation.height) < 4 {
-                    activeKey = activeKey == key.id ? nil : key.id
-                    editor.scrubToKey(clip, time: key.time)
-                    Haptics.selection()
-                }
-                finish()
-            }
     }
 
     // MARK: - The box
@@ -327,6 +187,7 @@ struct CanvasTransformOverlay: View {
         editor.markUndoPoint()
         didPushUndo = true
         dragging = (clip.id, editor.liveTransform(of: clip))
+        editor.beginTransformDrag()
     }
 
     /// Push the in-flight framing at the compositor without touching the
@@ -343,18 +204,6 @@ struct CanvasTransformOverlay: View {
             editor.commitTransform(clip.id, to: dragging.value)
         }
         dragging = nil
-        gesture = nil
-        didPushUndo = false
-        Haptics.selection()
-    }
-
-    private func beginKeyEdit() {
-        guard !didPushUndo else { return }
-        editor.markUndoPoint()
-        didPushUndo = true
-    }
-
-    private func finish() {
         gesture = nil
         didPushUndo = false
         Haptics.selection()
@@ -446,32 +295,5 @@ struct CanvasTransformOverlay: View {
                 drag(clip) { $0.rotation = degrees }
             }
             .onEnded { _ in finish(clip) }
-    }
-}
-
-// MARK: - Path markers
-
-/// Where a move begins.
-struct Chevron: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.4, y: rect.midY))
-        path.closeSubpath()
-        return path
-    }
-}
-
-/// Where it ends.
-struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }

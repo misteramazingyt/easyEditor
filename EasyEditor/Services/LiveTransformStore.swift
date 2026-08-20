@@ -19,8 +19,26 @@ final class LiveTransformStore {
 
     private let lock = NSLock()
     private var values: [UUID: ClipTransform] = [:]
+    private var dragging = false
 
     private init() {}
+
+    /// True while a handle is held. The compositor uses it to leave the
+    /// aesthetic treatment out of the frame: a CRT pass or a run of real ntsc
+    /// signal processing on every re-render is the difference between the
+    /// picture following your finger and trailing it, and the look comes
+    /// straight back the moment you let go.
+    var isDragging: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return dragging
+    }
+
+    func setDragging(_ value: Bool) {
+        lock.lock()
+        dragging = value
+        lock.unlock()
+    }
 
     func set(_ transform: ClipTransform?, for id: UUID) {
         lock.lock()

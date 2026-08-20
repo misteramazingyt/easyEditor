@@ -79,11 +79,6 @@ struct Keyframe<Value: KeyframeValue>: Codable, Equatable, Identifiable {
     /// This key's own shape, used at both its ends: how the move leaves here
     /// for the next key, and how the move from the previous one arrives.
     var easing: EasingCurve = .sine
-    /// Bezier control points for the *path*, as unit-canvas offsets from this
-    /// key's own centre. Only the motion track uses them; nil means the curve
-    /// through here is left to the automatic spline.
-    var inTangent: CGPoint?
-    var outTangent: CGPoint?
 }
 
 /// A sorted run of keys, and the reading of them the UI needs.
@@ -224,7 +219,7 @@ extension TimelineClip {
     /// sliding it carries the animation along.
     func transform(at timelineTime: Double, clipStart: Double) -> ClipTransform {
         guard let motionKeys, motionKeys.isActive else { return baseTransform }
-        return motionKeys.transform(at: timelineTime - clipStart) ?? baseTransform
+        return motionKeys.value(at: timelineTime - clipStart) ?? baseTransform
     }
 
     func composite(at timelineTime: Double, clipStart: Double) -> CompositeValue {
@@ -234,113 +229,5 @@ extension TimelineClip {
 
     var isAnimated: Bool {
         (motionKeys?.isActive ?? false) || (compositeKeys?.isActive ?? false)
-    }
-}
-
-// MARK: - The motion path
-
-/// Position between keys follows a spline rather than a straight line, which
-/// is what makes a move read as a camera rather than a slide.
-///
-/// Where a key has no tangents of its own, one is derived from its neighbours
-/// Catmull-Rom style, so a track that has only ever been keyed still curves
-/// sensibly. Dragging a handle pins that side explicitly.
-extension KeyframeTrack where Value == ClipTransform {
-
-    /// Control point leaving key `i`, in unit canvas coordinates.
-    func outControl(_ i: Int) -> CGPoint {
-        let key = keys[i]
-        if let out = key.outTangent {
-            return CGPoint(x: key.value.centerX + out.x, y: key.value.centerY + out.y)
-        }
-        let slope = autoSlope(i)
-        return CGPoint(x: key.value.centerX + slope.x, y: key.value.centerY + slope.y)
-    }
-
-    /// Control point arriving at key `i`.
-    func inControl(_ i: Int) -> CGPoint {
-        let key = keys[i]
-        if let into = key.inTangent {
-            return CGPoint(x: key.value.centerX + into.x, y: key.value.centerY + into.y)
-        }
-        let slope = autoSlope(i)
-        return CGPoint(x: key.value.centerX - slope.x, y: key.value.centerY - slope.y)
-    }
-
-    /// A sixth of the span between the neighbours either side — the standard
-    /// Catmull-Rom tangent, which passes smoothly through every key.
-    private func autoSlope(_ i: Int) -> CGPoint {
-        guard keys.count > 1 else { return .zero }
-        let previous = keys[max(0, i - 1)].value
-        let next = keys[min(keys.count - 1, i + 1)].value
-        return CGPoint(x: (next.centerX - previous.centerX) / 6,
-                       y: (next.centerY - previous.centerY) / 6)
-    }
-
-    private static func bezier(_ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint,
-                               _ p3: CGPoint, _ t: Double) -> CGPoint {
-        let u = 1 - t
-        let a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t
-        return CGPoint(x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-                       y: a * p0.y + b * p1.y + c * p2.y + d * p3.y)
-    }
-
-    /// The framing at a moment, with the centre riding the spline while scale
-    /// and rotation ease straight between their keys.
-    func transform(at time: Double) -> ClipTransform? {
-        guard let first = keys.first, let last = keys.last else { return nil }
-        if keys.count == 1 || time <= first.time { return first.value }
-        if time >= last.time { return last.value }
-        for i in 0..<(keys.count - 1) {
-            let a = keys[i], b = keys[i + 1]
-            guard time >= a.time, time <= b.time else { continue }
-            let span = b.time - a.time
-            guard span > 0.0001 else { return b.value }
-            let p = MotionEvaluator.eased(from: a.easing, to: b.easing,
-                                          (time - a.time) / span)
-            var value = ClipTransform.interpolate(a.value, b.value, p)
-            let point = Self.bezier(a.value.center, outControl(i),
-                                    inControl(i + 1), b.value.center, p)
-            value.center = point
-            return value
-        }
-        return last.value
-    }
-
-    /// The path as screen points, sampled finely enough to draw smoothly.
-    /// `project` maps a unit canvas point into the view.
-    func pathPoints(project: (CGPoint) -> CGPoint, perSegment: Int = 24) -> [CGPoint] {
-        guard keys.count > 1 else { return [] }
-        var result: [CGPoint] = []
-        for i in 0..<(keys.count - 1) {
-            let a = keys[i].value.center, b = keys[i + 1].value.center
-            let c1 = outControl(i), c2 = inControl(i + 1)
-            for step in 0...perSegment {
-                let t = Double(step) / Double(perSegment)
-                result.append(project(Self.bezier(a, c1, c2, b, t)))
-            }
-        }
-        return result
-    }
-
-    mutating func moveKey(id: UUID, to center: CGPoint) {
-        guard let index = keys.firstIndex(where: { $0.id == id }) else { return }
-        keys[index].value.center = center
-    }
-
-    /// Drag one handle and the other follows, mirrored — which is what keeps
-    /// the curve smooth through the key instead of putting a corner in it.
-    mutating func setTangent(id: UUID, outgoing: Bool, to control: CGPoint) {
-        guard let index = keys.firstIndex(where: { $0.id == id }) else { return }
-        let center = keys[index].value.center
-        let offset = CGPoint(x: control.x - center.x, y: control.y - center.y)
-        let mirrored = CGPoint(x: -offset.x, y: -offset.y)
-        if outgoing {
-            keys[index].outTangent = offset
-            keys[index].inTangent = mirrored
-        } else {
-            keys[index].inTangent = offset
-            keys[index].outTangent = mirrored
-        }
     }
 }

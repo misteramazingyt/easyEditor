@@ -68,6 +68,10 @@ extension EditorState {
     /// While a handle is held the value goes to the live store and the frame
     /// on screen is re-rendered. Nothing is written to the project and nothing
     /// is rebuilt, so the picture keeps up with the finger.
+    func beginTransformDrag() {
+        LiveTransformStore.shared.setDragging(true)
+    }
+
     func dragTransform(_ id: UUID, to value: ClipTransform) {
         LiveTransformStore.shared.set(value, for: id)
         playback.refreshFrame()
@@ -77,6 +81,7 @@ extension EditorState {
     /// rebuild — and the live override is dropped in the same breath so the
     /// picture never flickers back to where it was.
     func commitTransform(_ id: UUID, to value: ClipTransform) {
+        LiveTransformStore.shared.setDragging(false)
         guard var clip = project.clip(id) else {
             LiveTransformStore.shared.set(nil, for: id)
             return
@@ -92,6 +97,7 @@ extension EditorState {
     }
 
     func cancelTransformDrag(_ id: UUID) {
+        LiveTransformStore.shared.setDragging(false)
         LiveTransformStore.shared.set(nil, for: id)
         playback.refreshFrame()
     }
@@ -172,34 +178,6 @@ extension EditorState {
         guard let keys = clip.compositeKeys,
               let index = keys.governingIndex(at: localTime(of: clip)) else { return .sine }
         return keys.keys[index].easing
-    }
-
-    // MARK: - Editing the path itself
-
-    /// Drag a keyframe marker in the viewer. The key keeps its time; only
-    /// where the layer is at that moment changes.
-    func moveMotionKey(_ id: UUID, key: UUID, to center: CGPoint, live: Bool = true) {
-        guard var clip = project.clip(id), var keys = clip.motionKeys else { return }
-        if !live { markUndoPoint() }
-        keys.moveKey(id: key, to: center)
-        clip.motionKeys = keys
-        project.update(clip)
-    }
-
-    /// Drag a spline handle. The opposite handle mirrors, so the curve stays
-    /// smooth through the key rather than gaining a corner.
-    func setMotionTangent(_ id: UUID, key: UUID, outgoing: Bool, to control: CGPoint) {
-        guard var clip = project.clip(id), var keys = clip.motionKeys else { return }
-        keys.setTangent(id: key, outgoing: outgoing, to: control)
-        clip.motionKeys = keys
-        project.update(clip)
-    }
-
-    /// Put the playhead on a keyframe, so tapping one in the viewer shows you
-    /// the frame it belongs to.
-    func scrubToKey(_ clip: TimelineClip, time local: Double) {
-        scrub(to: project.start(of: clip) + local)
-        endScrub()
     }
 
     // MARK: - Canvas geometry

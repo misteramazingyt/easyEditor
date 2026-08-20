@@ -87,7 +87,7 @@ enum KeyframeResolver {
             return live
         }
         guard let keys, keys.isActive else { return base }
-        return keys.transform(at: time - clipStart) ?? base
+        return keys.value(at: time - clipStart) ?? base
     }
 
     static func composite(_ base: CompositeValue, _ keys: KeyframeTrack<CompositeValue>?,
@@ -446,7 +446,12 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         let ordered = pending.sorted(by: { ($0.z, $0.seq) < ($1.z, $1.seq) })
         let time = request.compositionTime.seconds
 
-        if let aesthetic = instruction.aesthetic {
+        // Dragging a handle re-renders this frame over and over. The treatment
+        // is the most expensive thing in it and the least useful to see while
+        // you are placing a layer, so it sits out until the finger lifts.
+        let aestheticNow = LiveTransformStore.shared.isDragging ? nil : instruction.aesthetic
+
+        if let aesthetic = aestheticNow {
             // What the picture throws off, minus anything opted out (camera
             // takes, by default) — used for both the ghost and the spill.
             var spillSource: CIImage?
@@ -475,7 +480,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
 
         // The whole frame wears the treatment at the strength that was asked
         // for — at 100% that is precisely the look on the gallery tile.
-        if let aesthetic = instruction.aesthetic {
+        if let aesthetic = aestheticNow {
             result = AestheticRenderer.treat(result, aesthetic, canvas: canvas,
                                              time: time, weight: 1)
         }
