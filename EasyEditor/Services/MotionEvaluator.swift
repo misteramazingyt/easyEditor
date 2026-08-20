@@ -18,7 +18,14 @@ enum MotionEvaluator {
         case .cubic: return t * t * t
         case .quart: return t * t * t * t
         case .quint: return t * t * t * t * t
-        case .expo: return t <= 0 ? 0 : pow(2, 10 * (t - 1))
+        case .expo:
+            // Normalised so it truly starts at 0. The textbook form leaves
+            // 2^-10 on the table at t = 0, and that residue is a visible step
+            // on the first frame of a move rather than a smooth departure.
+            if t <= 0 { return 0 }
+            if t >= 1 { return 1 }
+            let floorValue = pow(2.0, -10.0)
+            return (pow(2, 10 * (t - 1)) - floorValue) / (1 - floorValue)
         case .circ: return 1 - sqrt(max(0, 1 - t * t))
         case .back:
             let c = 1.70158

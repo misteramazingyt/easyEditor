@@ -123,11 +123,21 @@ struct KeyframeTrack<Value: KeyframeValue>: Codable, Equatable {
         index(at: time).map { keys[$0] }
     }
 
-    /// The key that governs the segment the playhead is inside — the one it is
-    /// sitting on, or the last one behind it.
+    /// The key whose easing shapes the movement happening at this moment.
+    ///
+    /// A key's easing shapes the segment *leaving* it, so the last key's own
+    /// easing is never used — parking on it and picking a curve would appear
+    /// to do nothing at all. Sitting on the final key means the segment that
+    /// matters is the one arriving there, which the key before it owns.
     func governingIndex(at time: Double) -> Int? {
-        if let exact = index(at: time) { return exact }
-        return keys.lastIndex { $0.time < time }
+        guard keys.count > 1 else { return keys.isEmpty ? nil : 0 }
+        if let exact = index(at: time) {
+            return exact == keys.count - 1 ? exact - 1 : exact
+        }
+        if let behind = keys.lastIndex(where: { $0.time < time }) {
+            return min(behind, keys.count - 2)
+        }
+        return 0
     }
 
     func marker(at time: Double) -> KeyframeMarker {

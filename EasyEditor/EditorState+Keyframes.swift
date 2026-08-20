@@ -63,6 +63,53 @@ extension EditorState {
         project.update(clip)
     }
 
+    // MARK: - Dragging a handle
+
+    /// While a handle is held the value goes to the live store and the frame
+    /// on screen is re-rendered. Nothing is written to the project and nothing
+    /// is rebuilt, so the picture keeps up with the finger.
+    func dragTransform(_ id: UUID, to value: ClipTransform) {
+        LiveTransformStore.shared.set(value, for: id)
+        playback.refreshFrame()
+    }
+
+    /// Release: the value lands in the project once — one undo step, one
+    /// rebuild — and the live override is dropped in the same breath so the
+    /// picture never flickers back to where it was.
+    func commitTransform(_ id: UUID, to value: ClipTransform) {
+        guard var clip = project.clip(id) else {
+            LiveTransformStore.shared.set(nil, for: id)
+            return
+        }
+        if var keys = clip.motionKeys, keys.isActive {
+            keys.set(value, at: localTime(of: clip))
+            clip.motionKeys = keys
+        } else {
+            clip.setBaseTransform(value)
+        }
+        project.update(clip)
+        LiveTransformStore.shared.set(nil, for: id)
+    }
+
+    func cancelTransformDrag(_ id: UUID) {
+        LiveTransformStore.shared.set(nil, for: id)
+        playback.refreshFrame()
+    }
+
+    /// A layer's rect for a framing the project doesn't know about yet.
+    func canvasFrame(of clip: TimelineClip, using transform: ClipTransform) -> CGRect? {
+        guard let natural = layerSizes[clip.id], natural.width > 0 else { return nil }
+        let canvas = project.aspect.renderSize
+        let width = clip.usesPlacement
+            ? canvas.width * transform.scale
+            : natural.width * transform.scale
+        let stretch = transform.heightScale / max(0.0001, transform.scale)
+        let height = width * natural.height / max(1, natural.width) * stretch
+        return CGRect(x: canvas.width * transform.centerX - width / 2,
+                      y: canvas.height * transform.centerY - height / 2,
+                      width: width, height: height)
+    }
+
     // MARK: - The lozenges
 
     /// Off: start the track here, pinning what the clip is doing now. On a key:
@@ -188,14 +235,6 @@ extension EditorState {
     /// of the canvas. Video scales the aspect fit the compositor already does,
     /// so 1 is the framing you get untouched.
     func canvasFrame(of clip: TimelineClip) -> CGRect? {
-        guard let natural = layerSizes[clip.id], natural.width > 0 else { return nil }
-        let canvas = project.aspect.renderSize
-        let t = liveTransform(of: clip)
-        let width = clip.usesPlacement ? canvas.width * t.scale : natural.width * t.scale
-        let stretch = t.heightScale / max(0.0001, t.scale)
-        let height = width * natural.height / max(1, natural.width) * stretch
-        return CGRect(x: canvas.width * t.centerX - width / 2,
-                      y: canvas.height * t.centerY - height / 2,
-                      width: width, height: height)
+        canvasFrame(of: clip, using: liveTransform(of: clip))
     }
 }

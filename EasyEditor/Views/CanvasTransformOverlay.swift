@@ -17,6 +17,10 @@ struct CanvasTransformOverlay: View {
 
     @State private var gesture: Gesture?
     @State private var didPushUndo = false
+    /// The framing being dragged. Held here rather than written to the project
+    /// on every event: the box is drawn from it and the compositor reads it
+    /// through the live store, so nothing rebuilds until the finger lifts.
+    @State private var dragging: (id: UUID, value: ClipTransform)?
     /// The keyframe whose spline handles are showing.
     @State private var activeKey: UUID?
 
@@ -96,8 +100,15 @@ struct CanvasTransformOverlay: View {
                       width: width, height: height)
     }
 
+    /// What this clip is framed at right now: the drag in progress if there is
+    /// one, otherwise whatever the project says.
+    private func framing(of clip: TimelineClip) -> ClipTransform {
+        if let dragging, dragging.id == clip.id { return dragging.value }
+        return editor.liveTransform(of: clip)
+    }
+
     private func screenFrame(of clip: TimelineClip, canvas: CGRect) -> CGRect? {
-        guard let frame = editor.canvasFrame(of: clip) else { return nil }
+        guard let frame = editor.canvasFrame(of: clip, using: framing(of: clip)) else { return nil }
         let render = editor.project.aspect.renderSize
         let scale = canvas.width / max(1, render.width)
         return CGRect(x: canvas.minX + frame.minX * scale,
@@ -219,7 +230,7 @@ struct CanvasTransformOverlay: View {
             .gesture(
                 DragGesture(minimumDistance: 1)
                     .onChanged { value in
-                        begin()
+                        beginKeyEdit()
                         gesture = .tangent(id: key, outgoing: outgoing)
                         editor.setMotionTangent(clip.id, key: key, outgoing: outgoing,
                                                 to: toUnit(value.location, canvas: canvas))
@@ -233,7 +244,7 @@ struct CanvasTransformOverlay: View {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
                 if value.translation == .zero { return }
-                begin()
+                beginKeyEdit()
                 gesture = .key(id: key.id)
                 editor.moveMotionKey(clip.id, key: key.id,
                                      to: toUnit(value.location, canvas: canvas))
@@ -253,7 +264,7 @@ struct CanvasTransformOverlay: View {
     // MARK: - The box
 
     private func boxView(clip: TimelineClip, box: CGRect, canvas: CGRect) -> some View {
-        let rotation = Angle(degrees: editor.liveTransform(of: clip).rotation)
+        let rotation = Angle(degrees: framing(of: clip).rotation)
         let stalk = max(34, box.width / 2 + 22)
         return ZStack {
             Rectangle()
@@ -311,7 +322,33 @@ struct CanvasTransformOverlay: View {
 
     // MARK: - Gestures
 
-    private func begin() {
+    private func begin(_ clip: TimelineClip) {
+        guard !didPushUndo else { return }
+        editor.markUndoPoint()
+        didPushUndo = true
+        dragging = (clip.id, editor.liveTransform(of: clip))
+    }
+
+    /// Push the in-flight framing at the compositor without touching the
+    /// project, and keep the box drawn from the same number.
+    private func drag(_ clip: TimelineClip, _ change: (inout ClipTransform) -> Void) {
+        guard var value = dragging?.value, dragging?.id == clip.id else { return }
+        change(&value)
+        dragging = (clip.id, value)
+        editor.dragTransform(clip.id, to: value)
+    }
+
+    private func finish(_ clip: TimelineClip) {
+        if let dragging, dragging.id == clip.id {
+            editor.commitTransform(clip.id, to: dragging.value)
+        }
+        dragging = nil
+        gesture = nil
+        didPushUndo = false
+        Haptics.selection()
+    }
+
+    private func beginKeyEdit() {
         guard !didPushUndo else { return }
         editor.markUndoPoint()
         didPushUndo = true
@@ -326,34 +363,34 @@ struct CanvasTransformOverlay: View {
     private func moveGesture(clip: TimelineClip, canvas: CGRect) -> some SwiftUI.Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
-                begin()
+                begin(clip)
                 let start: CGPoint
                 if case .move(let existing) = gesture {
                     start = existing
                 } else {
-                    start = editor.liveTransform(of: clip).center
+                    start = dragging?.value.center ?? editor.liveTransform(of: clip).center
                     gesture = .move(startCenter: start)
                 }
-                editor.updateTransform(clip.id, live: true) { t in
+                drag(clip) { t in
                     t.centerX = min(1.5, max(-0.5, start.x + value.translation.width / canvas.width))
                     t.centerY = min(1.5, max(-0.5, start.y + value.translation.height / canvas.height))
                 }
             }
-            .onEnded { _ in finish() }
+            .onEnded { _ in finish(clip) }
     }
 
     private func scaleGesture(clip: TimelineClip, handle: Handle,
                               canvas: CGRect) -> some SwiftUI.Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
-                begin()
+                begin(clip)
                 let startScale: Double
                 let startHeight: Double
                 if case .scale(_, let s, let h) = gesture {
                     startScale = s
                     startHeight = h
                 } else {
-                    let t = editor.liveTransform(of: clip)
+                    let t = dragging?.value ?? editor.liveTransform(of: clip)
                     startScale = t.scale
                     startHeight = t.heightScale
                     gesture = .scale(handle: handle, startScale: startScale, startHeight: startHeight)
@@ -366,7 +403,7 @@ struct CanvasTransformOverlay: View {
                 let outY = value.translation.height * handle.unit.y
                 let widthFactor = 1 + outX * 2 / box.width
                 let heightFactor = 1 + outY * 2 / box.height
-                editor.updateTransform(clip.id, live: true) { t in
+                drag(clip) { t in
                     if handle.isCorner {
                         // Corners keep the aspect: one factor drives both.
                         let factor = 1 + (outX + outY) / max(1, hypot(box.width, box.height))
@@ -381,13 +418,13 @@ struct CanvasTransformOverlay: View {
                     }
                 }
             }
-            .onEnded { _ in finish() }
+            .onEnded { _ in finish(clip) }
     }
 
     private func rotateGesture(clip: TimelineClip, box: CGRect) -> some SwiftUI.Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
-                begin()
+                begin(clip)
                 let centre = CGPoint(x: box.midX, y: box.midY)
                 let current = atan2(value.location.y - centre.y, value.location.x - centre.x)
                 let startRotation: Double
@@ -396,7 +433,8 @@ struct CanvasTransformOverlay: View {
                     startRotation = r
                     startAngle = a
                 } else {
-                    startRotation = editor.liveTransform(of: clip).rotation
+                    startRotation = dragging?.value.rotation
+                        ?? editor.liveTransform(of: clip).rotation
                     startAngle = atan2(value.startLocation.y - centre.y,
                                        value.startLocation.x - centre.x)
                     gesture = .rotate(startRotation: startRotation, startAngle: startAngle)
@@ -405,9 +443,9 @@ struct CanvasTransformOverlay: View {
                 // Snap to the eighths, so square is easy to find again.
                 let nearest = (degrees / 45).rounded() * 45
                 if abs(degrees - nearest) < 3 { degrees = nearest }
-                editor.updateTransform(clip.id, live: true) { $0.rotation = degrees }
+                drag(clip) { $0.rotation = degrees }
             }
-            .onEnded { _ in finish() }
+            .onEnded { _ in finish(clip) }
     }
 }
 

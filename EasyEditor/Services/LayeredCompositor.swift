@@ -35,6 +35,7 @@ struct CompositorLayer {
     var isScaffold = false
 
     /// Free framing from the canvas box, and the keys animating it.
+    var clipID: UUID?
     var baseTransform = ClipTransform()
     var motionKeys: KeyframeTrack<ClipTransform>?
     var compositeKeys: KeyframeTrack<CompositeValue>?
@@ -68,6 +69,7 @@ struct CompositorOverlay {
 
     /// Free framing from the canvas box, and the keys animating it. The
     /// placement above stays the baseline these are measured against.
+    var clipID: UUID?
     var baseTransform = ClipTransform()
     var motionKeys: KeyframeTrack<ClipTransform>?
     var compositeKeys: KeyframeTrack<CompositeValue>?
@@ -76,8 +78,14 @@ struct CompositorOverlay {
 /// Resolve an animated value for this instant, falling back to the baseline
 /// when a layer has no keys.
 enum KeyframeResolver {
-    static func transform(_ base: ClipTransform, _ keys: KeyframeTrack<ClipTransform>?,
+    static func transform(_ clipID: UUID?, _ base: ClipTransform,
+                          _ keys: KeyframeTrack<ClipTransform>?,
                           at time: Double, clipStart: Double) -> ClipTransform {
+        // A handle being held wins over anything the instructions were built
+        // with, so a drag shows in the picture without a rebuild.
+        if let clipID, let live = LiveTransformStore.shared.value(for: clipID) {
+            return live
+        }
         guard let keys, keys.isActive else { return base }
         return keys.transform(at: time - clipStart) ?? base
     }
@@ -238,7 +246,8 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             //     centre (0.5, 0.5) is exactly the fit above and an untouched
             //     clip goes through here unchanged.
             let now = request.compositionTime.seconds
-            let placed = KeyframeResolver.transform(layer.baseTransform, layer.motionKeys,
+            let placed = KeyframeResolver.transform(layer.clipID, layer.baseTransform,
+                                                    layer.motionKeys,
                                                     at: now, clipStart: layer.clipStart)
             if !placed.isIdentity {
                 let box = image.extent
@@ -383,7 +392,8 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             // Where the box put it, animated if it has keys — the entrance,
             // exit and loop motion above then rides on top of that.
             let now = request.compositionTime.seconds
-            let placed = KeyframeResolver.transform(overlay.baseTransform, overlay.motionKeys,
+            let placed = KeyframeResolver.transform(overlay.clipID, overlay.baseTransform,
+                                                    overlay.motionKeys,
                                                     at: now, clipStart: overlay.clipStart)
             let targetWidth = size.width * CGFloat(placed.scale)
             let scale = targetWidth / extent.width

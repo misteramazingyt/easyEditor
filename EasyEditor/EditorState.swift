@@ -674,7 +674,7 @@ final class EditorState: ObservableObject {
             Haptics.snap()
         case .paused:
             recorder.resume()
-            if playback.hasContent && !playback.isPlaying { playback.playPause() }
+            playback.resume()
             Haptics.snap()
         }
     }
@@ -714,7 +714,10 @@ final class EditorState: ObservableObject {
         liveTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.growLiveClip() }
         }
-        if playback.hasContent && !playback.isPlaying { playback.playPause() }
+        // resume, not playPause: a second take usually starts from where the
+        // first one ended, and playPause would read that as "at the end" and
+        // throw the playhead back to zero.
+        playback.resume()
         Haptics.drop()
     }
 

@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import QuartzCore
 
 /// Owns the AVPlayer for the editor preview. Rebuilds the player item when the
 /// project changes (preserving the playhead) and publishes time at 30 Hz.
@@ -20,6 +21,7 @@ final class PlaybackController: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
     private var isScrubbing = false
+    private var lastRefresh: CFTimeInterval = 0
     private var seekInFlight = false
     private var pendingSeek: Double?
 
@@ -102,6 +104,32 @@ final class PlaybackController: ObservableObject {
     func pause() {
         player.pause()
         isPlaying = false
+    }
+
+    /// Play on from where we are, without playPause's rewind. Hitting play at
+    /// the end of a timeline should start it over; resuming a recording that
+    /// happens to sit at the end should not throw the playhead back to zero.
+    func resume() {
+        guard hasContent, let item = player.currentItem else { return }
+        guard currentTime < item.duration.seconds - 0.05 else { return }
+        player.play()
+        isPlaying = true
+    }
+
+    /// Re-render the frame on screen without rebuilding anything.
+    ///
+    /// Re-assigning the video composition makes AVFoundation run the
+    /// compositor again for the current time, which is what lets a drag show
+    /// up in the picture immediately: rebuilding the whole composition to move
+    /// a layer means re-cutting every track and swapping the player item, and
+    /// the box arrives long before the frame does.
+    func refreshFrame() {
+        guard !isPlaying, let item = player.currentItem,
+              let composition = item.videoComposition else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastRefresh > 1.0 / 40 else { return }
+        lastRefresh = now
+        item.videoComposition = composition.copy() as? AVVideoComposition
     }
 
     /// Scrub: coalesces rapid seeks so the player never falls behind the drag.
