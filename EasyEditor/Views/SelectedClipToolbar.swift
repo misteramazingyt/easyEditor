@@ -66,6 +66,7 @@ struct SelectedClipToolbar: View {
         }
         if clip.kind == .video || clip.kind == .image {
             tile("Cut Out", "person.and.background.dotted") { activeTool = .cutout }
+            tile("Mask", "circle.dashed") { activeTool = .mask }
         }
 
         if clip.kind == .video {
@@ -79,7 +80,7 @@ struct SelectedClipToolbar: View {
             tile("Effects", "wand.and.stars") { activeTool = .effects }
             tile("Adjust", "slider.horizontal.3") { activeTool = .adjust }
             tile("Retouch", "face.smiling") { activeTool = .retouch }
-            tile("Mask", "circle.dashed") { activeTool = .mask }
+
             tile("Reverse", "arrow.uturn.left.circle") { editor.reverseClip(clip.id) }
             if clip.lane == .primary {
                 tile("Freeze", "snowflake") { editor.freezeFrame(clip.id) }

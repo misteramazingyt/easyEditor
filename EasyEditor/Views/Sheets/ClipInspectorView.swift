@@ -5,6 +5,8 @@ import SwiftUI
 struct ClipInspectorView: View {
     @EnvironmentObject private var editor: EditorState
     @Environment(\.dismiss) private var dismiss
+    @State private var lengthField = ""
+    @State private var lengthNote: String?
 
     var body: some View {
         NavigationStack {
@@ -176,12 +178,45 @@ struct ClipInspectorView: View {
                 }
             }
 
+            lengthSection(for: clip)
+
             if clip.isVisual {
                 transformSection(for: clip)
             }
         }
         .scrollContentBackground(.hidden)
         .background(Color(red: 0.07, green: 0.08, blue: 0.12))
+    }
+
+    /// Type a length rather than dragging for it: "30s", "1.5m", or a bare
+    /// number of seconds. Footage clamps to the length of its own file.
+    @ViewBuilder
+    private func lengthSection(for clip: TimelineClip) -> some View {
+        Section("Length") {
+            HStack {
+                TextField("30s", text: $lengthField)
+                    .keyboardType(.numbersAndPunctuation)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit { applyLength(clip) }
+                Button("Set") { applyLength(clip) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(EditorState.parseLength(lengthField) == nil)
+            }
+            Text(lengthNote ?? "Now \(TimeFormat.clock(clip.effectiveDuration)).")
+                .font(.caption)
+                .foregroundStyle(lengthNote == nil ? .secondary : .orange)
+        }
+    }
+
+    private func applyLength(_ clip: TimelineClip) {
+        guard let seconds = EditorState.parseLength(lengthField) else { return }
+        let actual = editor.setLength(clip.id, seconds: seconds)
+        lengthNote = abs(actual - seconds) > 0.05
+            ? "Only \(TimeFormat.clock(actual)) of footage — that is the whole file."
+            : nil
+        lengthField = ""
+        Haptics.selection()
     }
 
     /// The same numbers the canvas box drives, on sliders — and the same

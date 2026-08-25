@@ -549,6 +549,7 @@ struct CompositionEngine {
                                                       compositing: clip.compositing,
                                                       blend: clip.blend,
                                                       zOrder: clip.stackIndex,
+                                                      mask: clip.mask,
                                                       clipID: clip.id,
                                                       baseTransform: clip.baseTransform,
                                                       motionKeys: clip.motionKeys,

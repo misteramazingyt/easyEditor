@@ -20,6 +20,11 @@ final class PlaybackController: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private var statusObservation: NSKeyValueObservation?
     private var isScrubbing = false
+    /// Set across a rebuild. A replaced item reports time 0 until its seek
+    /// lands, and letting that reach `currentTime` means the *next* rebuild
+    /// resumes from zero — which is why editing during a refresh threw the
+    /// playhead back to the start of the timeline.
+    private var isInstalling = false
     private var redisplayNudge = false
     private var seekInFlight = false
     private var pendingSeek: Double?
@@ -29,7 +34,7 @@ final class PlaybackController: ObservableObject {
         let interval = CMTime(value: 1, timescale: 30)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, !self.isScrubbing else { return }
+                guard let self, !self.isScrubbing, !self.isInstalling else { return }
                 self.currentTime = max(0, time.seconds)
             }
         }
@@ -52,10 +57,12 @@ final class PlaybackController: ObservableObject {
         let resumeTime = currentTime
         let wasPlaying = isPlaying
         player.pause()
+        isInstalling = true
         guard let built else {
             player.replaceCurrentItem(with: nil)
             hasContent = false
             isPlaying = false
+            isInstalling = false
             return
         }
         let item = AVPlayerItem(asset: built.composition)
@@ -74,9 +81,11 @@ final class PlaybackController: ObservableObject {
         player.replaceCurrentItem(with: item)
         hasContent = true
         let clamped = min(resumeTime, max(0, built.duration - 0.05))
-        player.seek(to: CMTime(seconds: clamped, preferredTimescale: 600),
-                    toleranceBefore: .zero, toleranceAfter: .zero)
         currentTime = clamped
+        player.seek(to: CMTime(seconds: clamped, preferredTimescale: 600),
+                    toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            Task { @MainActor in self?.isInstalling = false }
+        }
         if wasPlaying {
             player.play()
         } else {

@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import UIKit
 
 /// Framing and animation: what the canvas box and the lozenges drive.
 extension EditorState {
@@ -68,8 +69,34 @@ extension EditorState {
     /// While a handle is held the value goes to the live store and the frame
     /// on screen is re-rendered. Nothing is written to the project and nothing
     /// is rebuilt, so the picture keeps up with the finger.
-    func beginTransformDrag() {
+    /// Lift the layer out of the composition and get a still of it for the
+    /// view to carry. The player re-renders the scene without it once; from
+    /// then until release, nothing has to be decoded at all.
+    func beginTransformDrag(_ clip: TimelineClip) {
         LiveTransformStore.shared.setDragging(true)
+        guard LayerPreviewCache.shared.cached(clip.id) != nil || clip.kind == .video else {
+            return
+        }
+        if LayerPreviewCache.shared.cached(clip.id) != nil {
+            LiveTransformStore.shared.setHidden(clip.id)
+            playback.refreshFrame()
+            return
+        }
+        let local = localTime(of: clip)
+        let projectID = project.id
+        Task { @MainActor in
+            guard await LayerPreviewCache.shared.frame(for: clip, projectID: projectID,
+                                                       at: local) != nil,
+                  LiveTransformStore.shared.isDragging else { return }
+            LiveTransformStore.shared.setHidden(clip.id)
+            playback.refreshFrame()
+        }
+    }
+
+    /// The still the view should draw while dragging, if there is one.
+    func dragPreview(for id: UUID) -> UIImage? {
+        guard LiveTransformStore.shared.hiddenClipID == id else { return nil }
+        return LayerPreviewCache.shared.cached(id)
     }
 
     func dragTransform(_ id: UUID, to value: ClipTransform) {
@@ -82,6 +109,7 @@ extension EditorState {
     /// picture never flickers back to where it was.
     func commitTransform(_ id: UUID, to value: ClipTransform) {
         LiveTransformStore.shared.setDragging(false)
+        LiveTransformStore.shared.setHidden(nil)
         guard var clip = project.clip(id) else {
             LiveTransformStore.shared.set(nil, for: id)
             return
@@ -98,6 +126,7 @@ extension EditorState {
 
     func cancelTransformDrag(_ id: UUID) {
         LiveTransformStore.shared.setDragging(false)
+        LiveTransformStore.shared.setHidden(nil)
         LiveTransformStore.shared.set(nil, for: id)
         playback.refreshFrame()
     }
@@ -214,5 +243,52 @@ extension EditorState {
     /// so 1 is the framing you get untouched.
     func canvasFrame(of clip: TimelineClip) -> CGRect? {
         canvasFrame(of: clip, using: liveTransform(of: clip))
+    }
+}
+
+// MARK: - Length
+
+extension EditorState {
+
+    /// Read a length the way you would say it: "30s", "1.5m", "90". A bare
+    /// number is seconds, because that is what people mean.
+    static func parseLength(_ text: String) -> Double? {
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmed.isEmpty else { return nil }
+        var multiplier = 1.0
+        if trimmed.hasSuffix("m") {
+            multiplier = 60
+            trimmed.removeLast()
+        } else if trimmed.hasSuffix("s") {
+            trimmed.removeLast()
+        }
+        guard let value = Double(trimmed.trimmingCharacters(in: .whitespaces)),
+              value.isFinite, value > 0 else { return nil }
+        return value * multiplier
+    }
+
+    /// Set a clip's length outright. Footage can only be as long as the file
+    /// it came from, so video and audio clamp; stills and titles will hold a
+    /// frame for as long as you like.
+    ///
+    /// Returns what the clip actually ended up at, so the field can show you
+    /// when a request was cut short rather than silently ignoring it.
+    @discardableResult
+    func setLength(_ id: UUID, seconds: Double) -> Double {
+        guard var clip = project.clip(id) else { return 0 }
+        markUndoPoint()
+        let wanted = max(0.1, seconds)
+        switch clip.kind {
+        case .image, .title:
+            clip.trimEnd = clip.trimStart + wanted
+        case .video, .music, .voiceover, .sfx:
+            // The trim window runs at source speed; the timeline sees it
+            // divided by the speed, so a 2x clip needs twice the window.
+            let window = wanted * max(0.1, clip.speed)
+            let available = max(0, clip.assetDuration - clip.trimStart)
+            clip.trimEnd = clip.trimStart + min(window, available)
+        }
+        project.update(clip)
+        return clip.effectiveDuration
     }
 }

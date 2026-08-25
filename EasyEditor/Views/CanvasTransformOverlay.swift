@@ -63,6 +63,17 @@ struct CanvasTransformOverlay: View {
 
                 if let clip = editor.selectedClip, clip.isVisual,
                    let box = screenFrame(of: clip, canvas: canvas) {
+                    // While a handle is held the layer is lifted out of the
+                    // composition and drawn here instead, so it moves with the
+                    // screen rather than with the player.
+                    if dragging?.id == clip.id, let ghost = editor.dragPreview(for: clip.id) {
+                        Image(uiImage: ghost)
+                            .resizable()
+                            .frame(width: box.width, height: box.height)
+                            .rotationEffect(Angle(degrees: framing(of: clip).rotation))
+                            .position(x: box.midX, y: box.midY)
+                            .allowsHitTesting(false)
+                    }
                     boxView(clip: clip, box: box, canvas: canvas)
                 }
             }
@@ -187,7 +198,7 @@ struct CanvasTransformOverlay: View {
         editor.markUndoPoint()
         didPushUndo = true
         dragging = (clip.id, editor.liveTransform(of: clip))
-        editor.beginTransformDrag()
+        editor.beginTransformDrag(clip)
     }
 
     /// Push the in-flight framing at the compositor without touching the

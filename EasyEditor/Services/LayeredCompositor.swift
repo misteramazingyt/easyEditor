@@ -66,6 +66,8 @@ struct CompositorOverlay {
     /// Timeline stacking slot, shared scale with CompositorLayer.
     var zOrder: Int = 0
     var castsCaustics: Bool = true
+    /// Shape mask, in canvas coordinates like the video layers use.
+    var mask: MaskSettings?
 
     /// Free framing from the canvas box, and the keys animating it. The
     /// placement above stays the baseline these are measured against.
@@ -187,11 +189,14 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         let total = max(0.0001, range.duration.seconds)
         let progress = min(1, max(0, elapsed / total))
 
+        let lifted = LiveTransformStore.shared.hiddenClipID
         for layer in instruction.layers {
             // Scaffolding is opaque black across the whole canvas, so drawing
             // it would bury the treated backdrop under exactly the black the
             // backdrop replaces.
             if layer.isScaffold, instruction.aesthetic != nil { continue }
+            // Being dragged: the view is drawing this one itself.
+            if let lifted, layer.clipID == lifted { continue }
             guard let buffer = request.sourceFrame(byTrackID: layer.trackID) else { continue }
             var image = CIImage(cvPixelBuffer: buffer)
 
@@ -380,6 +385,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         // 7. Title / image overlays (Core Image y-axis points up, placements
         //    use UIKit-style y-down unit coordinates), with per-frame motion.
         for overlay in instruction.overlays {
+            if let lifted, overlay.clipID == lifted { continue }
             var image = overlay.image
             let extent = image.extent
             guard extent.width > 0, extent.height > 0 else { continue }
@@ -421,6 +427,12 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             }
             if motion.glitchSeed != 0 {
                 image = Self.applyGlitch(to: image, shift: motion.glitchShift)
+            }
+            // The mask is in canvas coordinates, so it goes on after the
+            // overlay has been placed rather than while it is still its own
+            // little picture at the origin.
+            if let mask = overlay.mask {
+                image = Self.applyMask(mask, to: image, canvas: canvas)
             }
             if let compositing = overlay.compositing, compositing.effect != .none {
                 image = Self.applyCompositing(compositing, to: image, canvas: canvas)

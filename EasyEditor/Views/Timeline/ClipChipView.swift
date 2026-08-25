@@ -197,7 +197,11 @@ struct ClipChipView: View {
             )
             .contentShape(Rectangle().inset(by: -8))
             .gesture(
-                DragGesture(minimumDistance: 1)
+                // Global space on purpose: this handle is pinned to the edge
+                // it is dragging, so it travels with the clip. Measured in its
+                // own space the translation shrinks as the clip grows, and the
+                // edge crawls along at a fraction of the finger.
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in onTrim(edge, value.translation.width, false) }
                     .onEnded { value in onTrim(edge, value.translation.width, true) }
             )

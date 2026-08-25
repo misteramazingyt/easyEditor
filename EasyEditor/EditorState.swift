@@ -167,6 +167,7 @@ final class EditorState: ObservableObject {
         rebuildTask = Task { [weak self] in
             guard let self else { return }
             let overlays = await self.engine.renderOverlayImages(project: snapshot)
+            for (id, image) in overlays { LayerPreviewCache.shared.store(image, for: id) }
             do {
                 let built = try await self.engine.build(project: snapshot, overlayImages: overlays)
                 guard !Task.isCancelled else { return }

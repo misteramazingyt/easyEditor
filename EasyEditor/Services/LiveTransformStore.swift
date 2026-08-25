@@ -20,6 +20,7 @@ final class LiveTransformStore {
     private let lock = NSLock()
     private var values: [UUID: ClipTransform] = [:]
     private var dragging = false
+    private var hidden: UUID?
 
     private init() {}
 
@@ -37,6 +38,25 @@ final class LiveTransformStore {
     func setDragging(_ value: Bool) {
         lock.lock()
         dragging = value
+        lock.unlock()
+    }
+
+    /// A layer the compositor should leave out entirely.
+    ///
+    /// While you drag, the picture cannot keep up with your finger: every
+    /// re-render costs a seek and a decode. So the layer is lifted out of the
+    /// composition once, the player renders the scene without it, and the view
+    /// draws it back on top in SwiftUI, where it moves at the frame rate of
+    /// the screen. Put it back on release and the two are the same picture.
+    var hiddenClipID: UUID? {
+        lock.lock()
+        defer { lock.unlock() }
+        return hidden
+    }
+
+    func setHidden(_ id: UUID?) {
+        lock.lock()
+        hidden = id
         lock.unlock()
     }
 

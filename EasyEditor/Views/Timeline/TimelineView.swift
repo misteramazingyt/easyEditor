@@ -114,6 +114,8 @@ struct TimelineView: View {
     @State private var proposedIndex: Int?
 
     @State private var trimOriginal: TimelineClip?
+    /// Timeline second the dragged clip is currently snapped to, for the line.
+    @State private var snapLine: Double?
 
     var body: some View {
         let rows = rows
@@ -203,6 +205,14 @@ struct TimelineView: View {
                 ForEach(clips) { clip in
                     clipView(clip, row: rowEntry, rows: rows, pps: pps)
                 }
+            }
+
+            if let snapLine {
+                Rectangle()
+                    .fill(Color(red: 1.0, green: 0.85, blue: 0.35))
+                    .frame(width: 1.5, height: rowsHeight(rows))
+                    .offset(x: CGFloat(snapLine) * pps - 0.75)
+                    .allowsHitTesting(false)
             }
 
             transitionButtons(rows: rows, pps: pps)
@@ -392,8 +402,11 @@ struct TimelineView: View {
     // MARK: - Clip move (magnetic, unlimited stacking, lane-crossing haptics)
 
     private func moveGesture(clip: TimelineClip, rows: [Row], pps: CGFloat) -> some Gesture {
+        // Global space: the chip travels with the drag, so translation read in
+        // its own space shrinks as it moves and the clip lands short of the
+        // finger — which is what made drops feel arbitrary.
         LongPressGesture(minimumDuration: 0.25)
-            .sequenced(before: DragGesture(minimumDistance: 0))
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
             .onChanged { value in
                 guard case .second(true, let drag?) = value else {
                     if case .second(true, nil) = value, dragClipID == nil {
@@ -407,7 +420,12 @@ struct TimelineView: View {
                 }
                 dragClipID = clip.id
                 dragGroupID = clip.groupID
-                dragTranslation = drag.translation
+                let snapped = snapTime(for: clip, rawDelta: Double(drag.translation.width / pps))
+                dragTranslation = CGSize(
+                    width: CGFloat(snapped.delta) * pps,
+                    height: drag.translation.height)
+                if snapped.line != snapLine, snapped.line != nil { Haptics.snap() }
+                snapLine = snapped.line
 
                 // A group's stagger depends on its lane assignment, so grouped
                 // clips slide in time only — no cross-lane moves.
@@ -432,6 +450,12 @@ struct TimelineView: View {
                     Haptics.laneChange()
                 }
                 proposedRow = target
+                // Sit in the row being aimed at rather than under the finger:
+                // the clip steps cleanly from layer to layer instead of
+                // floating between them.
+                if let destination = row(target, in: rows) {
+                    dragTranslation.height = destination.centerY - homeRow.centerY
+                }
 
                 // Magnetic insertion point while hovering the storyline.
                 if target == 0 {
@@ -451,11 +475,13 @@ struct TimelineView: View {
                     dragTranslation = .zero
                     proposedRow = nil
                     proposedIndex = nil
+                    snapLine = nil
                 }
                 guard case .second(true, let drag?) = value,
                       let dragged = editor.project.clip(clip.id) else { return }
                 let pps = editor.pixelsPerSecond
-                let delta = Double(drag.translation.width / pps)
+                let delta = snapTime(for: dragged,
+                                     rawDelta: Double(drag.translation.width / pps)).delta
                 let newStart = editor.project.start(of: dragged) + delta
 
                 // Grouped: move every member together, keeping the stagger.
@@ -491,8 +517,7 @@ struct TimelineView: View {
                     }
                 } else if abs(drag.translation.width) > 2 {
                     editor.beginGesture()
-                    let snapped = snapOffset(max(0, newStart), pps: pps)
-                    editor.mutateLive(dragged.id) { $0.offset = snapped }
+                    editor.mutateLive(dragged.id) { $0.offset = max(0, newStart) }
                     Haptics.drop()
                 }
             }
@@ -508,13 +533,42 @@ struct TimelineView: View {
         return ordered.count
     }
 
-    /// Magnetic snap for connected clips: playhead, timeline start, storyline end.
-    private func snapOffset(_ offset: Double, pps: CGFloat) -> Double {
-        let candidates = [editor.playback.currentTime, 0, editor.project.storylineDuration]
-        for c in candidates where abs(offset - c) * pps < 10 {
-            return c
+    /// Every edge worth landing on: the start and end of every other clip on
+    /// any layer, the playhead, the start of the timeline, and the end of the
+    /// storyline. Aligning across layers is most of what timeline editing is,
+    /// and eyeballing it at 60 points a second is hopeless.
+    private func snapTargets(excluding id: UUID) -> [Double] {
+        var targets: [Double] = [0, editor.playback.currentTime,
+                                 editor.project.storylineDuration]
+        for other in editor.project.clips where other.id != id {
+            let start = editor.project.start(of: other)
+            targets.append(start)
+            targets.append(start + other.effectiveDuration)
         }
-        return offset
+        return targets
+    }
+
+    /// Pull a dragged clip's delta onto the nearest edge within reach, and say
+    /// where the line should be drawn. Both edges of the clip are candidates,
+    /// so it snaps whichever end is closest to something.
+    private func snapTime(for clip: TimelineClip,
+                          rawDelta: Double) -> (delta: Double, line: Double?) {
+        let pps = editor.pixelsPerSecond
+        let reach = Double(9 / pps)          // points, converted to seconds
+        let start = editor.project.start(of: clip) + rawDelta
+        let end = start + clip.effectiveDuration
+        var best: (delta: Double, line: Double, distance: Double)?
+        for target in snapTargets(excluding: clip.id) {
+            for edge in [start, end] {
+                let distance = abs(edge - target)
+                guard distance <= reach else { continue }
+                if best == nil || distance < best!.distance {
+                    best = (rawDelta + (target - edge), target, distance)
+                }
+            }
+        }
+        guard let best else { return (rawDelta, nil) }
+        return (best.delta, best.line)
     }
 
     // MARK: - Trim
