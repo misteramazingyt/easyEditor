@@ -190,9 +190,8 @@ struct ClipInspectorView: View {
 
     /// Type a length rather than dragging for it: "30s", "1.5m", or a bare
     /// number of seconds. Footage clamps to the length of its own file.
-    @ViewBuilder
     private func lengthSection(for clip: TimelineClip) -> some View {
-        Section("Length") {
+        Section {
             HStack {
                 TextField("30s", text: $lengthField)
                     .keyboardType(.numbersAndPunctuation)
@@ -200,12 +199,14 @@ struct ClipInspectorView: View {
                     .textInputAutocapitalization(.never)
                     .onSubmit { applyLength(clip) }
                 Button("Set") { applyLength(clip) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
                     .disabled(EditorState.parseLength(lengthField) == nil)
             }
             Text(lengthNote ?? "Now \(TimeFormat.clock(clip.effectiveDuration)).")
                 .font(.caption)
-                .foregroundStyle(lengthNote == nil ? .secondary : .orange)
+                .foregroundStyle(lengthNote == nil ? Color.secondary : Color.orange)
+        } header: {
+            Text("Length")
         }
     }
 
