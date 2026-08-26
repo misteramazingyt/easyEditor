@@ -550,6 +550,8 @@ struct CompositionEngine {
                                                       blend: clip.blend,
                                                       zOrder: clip.stackIndex,
                                                       mask: clip.mask,
+                                                      tube: clip.text?.style.effectiveSkin == .tube
+                                                          ? clip.text?.style.effectiveTube : nil,
                                                       clipID: clip.id,
                                                       baseTransform: clip.baseTransform,
                                                       motionKeys: clip.motionKeys,

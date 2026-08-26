@@ -248,6 +248,46 @@ struct Transition: Codable, Equatable {
 
 // MARK: - Text
 
+/// How a caption is dressed.
+enum CaptionSkin: String, Codable, CaseIterable, Identifiable {
+    /// The line-hugging bubble: sized to the words, as TikTok does it.
+    case plain
+    /// A little tube of its own — a fixed, horizontally elongated box holding
+    /// phosphor text behind glass, whatever the line happens to say.
+    case tube
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .plain: return "Plain"
+        case .tube: return "CRT"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .plain: return "text.bubble"
+        case .tube: return "tv"
+        }
+    }
+}
+
+/// A tube caption's dimensions and dose. The box is a constant size so a
+/// two-word line and a ten-word one sit in the same frame, which is the whole
+/// point of it — captions that don't jump about as the words change.
+struct TubeCaptionStyle: Codable, Equatable {
+    /// Box width as a fraction of the canvas.
+    var widthFraction: Double = 0.86
+    /// Width over height. A television, stretched: wide enough for two lines
+    /// of caption without ever looking like a square.
+    var aspect: Double = 4.2
+    /// How hard the glass is applied, 0…1.
+    var strength: Double = 0.9
+
+    static let `default` = TubeCaptionStyle()
+}
+
 struct TextStyleModel: Codable, Equatable {
     var fontName: String = "TikTokSans-Bold"
     var fontSize: Double = 72          // points at 1080p canvas scale
@@ -257,6 +297,12 @@ struct TextStyleModel: Codable, Equatable {
     /// TikTok-style heavy black stroke around the glyphs (optional so old
     /// projects decode).
     var outline: Bool? = nil
+    /// nil reads as `.plain`, so projects saved before the tube existed decode.
+    var skin: CaptionSkin?
+    var tube: TubeCaptionStyle?
+
+    var effectiveSkin: CaptionSkin { skin ?? .plain }
+    var effectiveTube: TubeCaptionStyle { tube ?? .default }
 
     static let title = TextStyleModel()
     static let caption = TextStyleModel(fontName: "TikTokSans-SemiBold",
@@ -264,6 +310,19 @@ struct TextStyleModel: Codable, Equatable {
                                         colorHex: "#FFFFFF",
                                         backgroundHex: "#000000B4",
                                         hasShadow: false)
+
+    /// Phosphor on a dark tube. The blue-white is what the reference tape
+    /// actually reads as: a hot white core the chroma has smeared blue.
+    static func tubeCaption(_ tube: TubeCaptionStyle) -> TextStyleModel {
+        var style = TextStyleModel(fontName: "Menlo-Bold",
+                                   fontSize: 54,
+                                   colorHex: "#C8D8FF",
+                                   backgroundHex: nil,
+                                   hasShadow: false)
+        style.skin = .tube
+        style.tube = tube
+        return style
+    }
 }
 
 struct TextPayload: Codable, Equatable {

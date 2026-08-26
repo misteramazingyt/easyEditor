@@ -32,6 +32,7 @@ struct EditorView: View {
     @State private var isFramingCamera = false
     @State private var showOutroMenu = false
     @State private var showAesthetics = false
+    @State private var showCaptionStyle = false
     @State private var showReplacePicker = false
     @State private var replaceTargetID: UUID?
     @State private var replaceMedia: [PhotosPickerItem] = []
@@ -74,7 +75,7 @@ struct EditorView: View {
                     onSFX: { showSFXSheet = true },
                     onVoice: { showVoiceSheet = true },
                     onText: { textSheetIsTitle = false; showTextSheet = true },
-                    onCaptions: { editor.generateCaptions() },
+                    onCaptions: { showCaptionStyle = true },
                     onAutoBRoll: { showAutoBRoll = true },
                     onAesthetics: { showAesthetics = true },
                     onOutro: { showOutroMenu = true })
@@ -218,6 +219,10 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showAesthetics) {
             AestheticsSheet().environmentObject(editor)
+        }
+        .sheet(isPresented: $showCaptionStyle) {
+            CaptionStyleSheet { editor.generateCaptions() }
+                .environmentObject(editor)
         }
         .sheet(isPresented: $showAutoBRoll) {
             AutoBRollSheet().environmentObject(editor)

@@ -1143,10 +1143,18 @@ final class EditorState: ObservableObject {
                 return
             }
             pushUndo()
+            let style = CaptionStyleSheet.stored
+            var placement = OverlayPlacement.caption
+            if style.effectiveSkin == .tube {
+                // The box is already the size it was asked to be; the
+                // placement just has to agree with it.
+                placement.widthFraction = style.effectiveTube.widthFraction
+                placement.centerY = 0.78
+            }
             for caption in captions {
                 var clip = TimelineClip.title(
-                    TextPayload(string: caption.text, style: .caption),
-                    placement: .caption, at: caption.start)
+                    TextPayload(string: caption.text, style: style),
+                    placement: placement, at: caption.start)
                 clip.trimEnd = caption.duration
                 project.append(clip)
             }

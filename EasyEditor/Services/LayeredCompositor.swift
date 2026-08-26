@@ -68,6 +68,9 @@ struct CompositorOverlay {
     var castsCaustics: Bool = true
     /// Shape mask, in canvas coordinates like the video layers use.
     var mask: MaskSettings?
+    /// A caption dressed as a tube gets the glass put on per frame, so its
+    /// noise and scanline drift move rather than sitting there.
+    var tube: TubeCaptionStyle?
 
     /// Free framing from the canvas box, and the keys animating it. The
     /// placement above stays the baseline these are measured against.
@@ -428,6 +431,14 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             if motion.glitchSeed != 0 {
                 image = Self.applyGlitch(to: image, shift: motion.glitchShift)
             }
+            // The glass goes on before placement, while the caption is still
+            // its own little rectangle: the tube belongs to the box, not to
+            // the canvas, so its curvature bends the box's own edges.
+            if let tube = overlay.tube {
+                image = Self.applyTube(tube, to: image,
+                                       time: request.compositionTime.seconds)
+            }
+
             // The mask is in canvas coordinates, so it goes on after the
             // overlay has been placed rather than while it is still its own
             // little picture at the origin.
@@ -519,6 +530,34 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
     // MARK: - Motion, focus & compositing
 
     /// Apply an evaluated motion state about the canvas center (video layers).
+    /// Put a caption behind glass: phosphor bloom first, then the tube.
+    ///
+    /// Same order as everything else that wears this look — the phosphor
+    /// spreads the light and only then does the glass curve, scan and vignette
+    /// it. Run on the caption's own rectangle rather than the canvas, so the
+    /// curvature bows the box's edges and the vignette darkens its corners.
+    private static func applyTube(_ tube: TubeCaptionStyle, to input: CIImage,
+                                  time: Double) -> CIImage {
+        let box = input.extent
+        guard box.width > 8, box.height > 8 else { return input }
+        let strength = max(0, min(1, tube.strength))
+        let lit = AestheticKernel.shared.phosphorGlow(input, canvas: box,
+                                                      amount: 0.9 * strength)
+        // Composite video is far softer along the line than down it.
+        let smeared = lit.clampedToExtent()
+            .applyingFilter("CIMotionBlur", parameters: [
+                kCIInputRadiusKey: max(1, box.width / 420),
+                kCIInputAngleKey: 0,
+            ])
+            .cropped(to: box)
+        guard let glass = AestheticKernel.shared.applyCRT(to: smeared, canvas: box,
+                                                          strength: strength, time: time),
+              !glass.extent.isEmpty else { return smeared }
+        // The tube is opaque; keep the caption's own silhouette so the corners
+        // the curvature bends away stay clear of the picture behind it.
+        return glass.cropped(to: box)
+    }
+
     private static func applyMotion(_ motion: MotionEvaluator.MotionState,
                                     to input: CIImage, canvas: CGRect) -> CIImage {
         var image = input
