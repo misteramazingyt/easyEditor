@@ -103,6 +103,9 @@ struct TimelineView: View {
     @State private var panStart: (time: Double, anchor: CGFloat)?
     @State private var zoomStartScale: CGFloat?
     @State private var zoomStartRows: CGFloat?
+    /// Width of the timeline on screen, for working out how far out "all of
+    /// it" is.
+    @State private var viewportWidth: CGFloat = 360
     /// Distance from the viewport top to the storyline row's top — keeps the
     /// storyline visually stable as stacks grow. Negative = scrolled up.
     @State private var anchorFromTop: CGFloat = 40
@@ -175,6 +178,8 @@ struct TimelineView: View {
             .contentShape(Rectangle())
             .gesture(panGesture(pps: pps, maxScroll: maxScroll, primaryTop: primaryTop, viewportRows: viewportRows))
             .overlay(pinch)
+            .onAppear { viewportWidth = geo.size.width }
+            .onChange(of: geo.size.width) { _, width in viewportWidth = width }
         }
         .frame(height: totalHeight)
         .background(Color.black)
@@ -387,7 +392,12 @@ struct TimelineView: View {
             switch axis {
             case .horizontal:
                 if zoomStartScale == nil { zoomStartScale = editor.pixelsPerSecond }
-                editor.pixelsPerSecond = min(300, max(10, (zoomStartScale ?? 60) * scale))
+                // Far enough out that the whole project fits across the
+                // viewport, with a little air — pinching out should end at
+                // "the entire timeline", not at an arbitrary floor.
+                let whole = viewportWidth / max(1, CGFloat(editor.project.duration) * 1.15)
+                let floor = max(1.5, min(30, whole))
+                editor.pixelsPerSecond = min(300, max(floor, (zoomStartScale ?? 60) * scale))
             case .vertical:
                 if zoomStartRows == nil { zoomStartRows = editor.rowScale }
                 editor.rowScale = min(4, max(1, (zoomStartRows ?? 1) * scale))

@@ -38,16 +38,10 @@ struct EditorView: View {
     @State private var replaceMedia: [PhotosPickerItem] = []
 
     init(project: VideoProject) {
-        // The save closure is wired to AppState in .onAppear via the
-        // environment; the StateObject needs a stable initial closure, so we
-        // route through a shared box.
-        let box = SaveBox()
-        _editor = StateObject(wrappedValue: EditorState(project: project) { box.save?($0) })
-        saveBox = box
+        // Saves are wired to AppState on appear, straight onto the state
+        // object itself — see EditorState.onSave.
+        _editor = StateObject(wrappedValue: EditorState(project: project))
     }
-
-    private let saveBox: SaveBox
-    final class SaveBox { var save: ((VideoProject) -> Void)? }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,7 +77,7 @@ struct EditorView: View {
         }
         .background(Color(red: 0.05, green: 0.06, blue: 0.09).ignoresSafeArea())
         .onAppear {
-            saveBox.save = { appState.save($0) }
+            editor.onSave = { [weak appState] in appState?.save($0) }
             Haptics.prepare()
             editor.resumeAutosave()
         }

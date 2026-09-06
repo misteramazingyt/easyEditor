@@ -21,17 +21,34 @@ final class AppState: ObservableObject {
     func createProject(name: String? = nil) -> VideoProject {
         let number = projects.count + 1
         let project = VideoProject(name: name ?? "Project \(number)")
-        projects.insert(project, at: 0)
-        store.saveProjects(projects)
+        add(project)
         return project
     }
 
+    /// Put a project into the library. The only way one gets in: everything
+    /// else may update what is already there, never conjure it back.
+    func add(_ project: VideoProject) {
+        projects.insert(project, at: 0)
+        store.saveProjects(projects)
+    }
+
+    /// An editor writing its work back.
+    ///
+    /// This updates an existing project and will not create one. An editor can
+    /// still be closing — flushing a last save — while you delete the project
+    /// from the list, and an insert here would quietly bring it back; that is
+    /// why deleted projects returned after a restart.
+    ///
+    /// The name is not the editor's to write either. It holds whatever the
+    /// project was called when it opened, so a rename made in the list would
+    /// be overwritten by a stale copy on the way out. The list owns the name;
+    /// the editor owns the contents.
     func save(_ project: VideoProject) {
-        if let i = projects.firstIndex(where: { $0.id == project.id }) {
-            projects[i] = project
-        } else {
-            projects.insert(project, at: 0)
-        }
+        guard let i = projects.firstIndex(where: { $0.id == project.id }) else { return }
+        var updated = project
+        updated.name = projects[i].name
+        updated.modifiedAt = Date()
+        projects[i] = updated
         store.saveProjects(projects)
     }
 
@@ -55,7 +72,7 @@ final class AppState: ObservableObject {
         Task {
             do {
                 let result = try await GreenDeckImportService.importProject(from: url)
-                save(result.project)
+                add(result.project)
                 var message = "Imported “\(result.project.name)” — \(result.imported) clip\(result.imported == 1 ? "" : "s")"
                 if result.skipped > 0 {
                     message += " (\(result.skipped) skipped)"

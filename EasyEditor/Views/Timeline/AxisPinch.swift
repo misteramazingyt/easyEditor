@@ -8,10 +8,13 @@ import UIKit
 /// different things — here, time across and layer height down. UIKit still
 /// hands over the individual touches, so the angle between them is readable.
 ///
-/// The recognizer is installed on the host view's parent rather than on the
-/// representable itself: a UIView laid over the timeline would swallow the
-/// scrub and drag gestures underneath it, and one laid behind would never see
-/// a touch. On the parent it observes without intercepting.
+/// The recognizer goes on the window, not on a view of our own: a UIView laid
+/// over the timeline would swallow the scrub and drag gestures underneath it,
+/// one laid behind would never see a touch, and SwiftUI's own container views
+/// are re-parented often enough that hanging it on the immediate parent is a
+/// coin toss — which is why this stopped working at all. From the window it
+/// sees every touch, and it only acts on pinches that began inside the
+/// timeline's own rectangle.
 struct AxisPinch: UIViewRepresentable {
     enum Axis { case horizontal, vertical }
 
@@ -28,7 +31,7 @@ struct AxisPinch: UIViewRepresentable {
         let view = HostView()
         view.backgroundColor = .clear
         view.isUserInteractionEnabled = false
-        view.recognizer = context.coordinator.recognizer
+        view.coordinator = context.coordinator
         return view
     }
 
@@ -38,14 +41,16 @@ struct AxisPinch: UIViewRepresentable {
     }
 
     final class HostView: UIView {
-        var recognizer: UIPinchGestureRecognizer?
+        weak var coordinator: Coordinator?
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            guard let recognizer, let target = superview else { return }
-            if recognizer.view !== target {
+            coordinator?.host = self
+            guard let coordinator, let window else { return }
+            let recognizer = coordinator.recognizer
+            if recognizer.view !== window {
                 recognizer.view?.removeGestureRecognizer(recognizer)
-                target.addGestureRecognizer(recognizer)
+                window.addGestureRecognizer(recognizer)
             }
         }
     }
@@ -60,6 +65,10 @@ struct AxisPinch: UIViewRepresentable {
             return gesture
         }()
         private var axis: Axis?
+        private var ignoring = false
+        /// The view standing in for the timeline, so a pinch elsewhere on
+        /// screen is left alone.
+        weak var host: UIView?
 
         init(onChange: @escaping (CGFloat, Axis) -> Void, onEnd: @escaping () -> Void) {
             self.onChange = onChange
@@ -70,8 +79,16 @@ struct AxisPinch: UIViewRepresentable {
             switch gesture.state {
             case .began:
                 axis = nil
+                // Only pinches that started over the timeline are ours.
+                if let host, let window = host.window {
+                    let frame = host.convert(host.bounds, to: window)
+                    ignoring = !frame.insetBy(dx: -12, dy: -12)
+                        .contains(gesture.location(in: window))
+                } else {
+                    ignoring = true
+                }
             case .changed:
-                guard gesture.numberOfTouches == 2 else { return }
+                guard !ignoring, gesture.numberOfTouches == 2 else { return }
                 if axis == nil {
                     // Commit to whichever way the fingers are further apart,
                     // once, so the gesture doesn't flip axis mid-pinch.
@@ -84,6 +101,7 @@ struct AxisPinch: UIViewRepresentable {
                 if let axis { onChange(gesture.scale, axis) }
             case .ended, .cancelled, .failed:
                 axis = nil
+                ignoring = false
                 onEnd()
             default:
                 break

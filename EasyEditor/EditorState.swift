@@ -44,7 +44,12 @@ final class EditorState: ObservableObject {
 
     private let engine = CompositionEngine()
     private let importer = MediaImportService()
-    private let save: (VideoProject) -> Void
+    /// Where saves go. Settable rather than passed in, because the view that
+    /// owns this is re-made on every render while the editor is open: a
+    /// closure captured at init belongs to whichever copy of the view happened
+    /// to build it, and the one still wiring itself up on appear would be a
+    /// different one — leaving saves pointed at nothing.
+    var onSave: ((VideoProject) -> Void)?
     private var undoStack: [VideoProject] = []
     private var redoStack: [VideoProject] = []
     private var toastTask: Task<Void, Never>?
@@ -72,9 +77,9 @@ final class EditorState: ObservableObject {
         return Set(project.linkedClips(with: selectedClipID).map(\.id))
     }
 
-    init(project: VideoProject, save: @escaping (VideoProject) -> Void) {
+    init(project: VideoProject, save: ((VideoProject) -> Void)? = nil) {
         self.project = project
-        self.save = save
+        self.onSave = save
         projectChanged
             .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
             .sink { [weak self] in
@@ -138,7 +143,7 @@ final class EditorState: ObservableObject {
         guard isDirty || force else { return }
         var snapshot = project
         snapshot.clips.removeAll { $0.isLiveRecording == true }
-        save(snapshot)
+        onSave?(snapshot)
         isDirty = false
     }
 
