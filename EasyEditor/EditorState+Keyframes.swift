@@ -101,6 +101,12 @@ extension EditorState {
 
     func dragTransform(_ id: UUID, to value: ClipTransform) {
         LiveTransformStore.shared.set(value, for: id)
+        // Once the layer has been lifted out and the view is carrying it, the
+        // player has nothing new to show: everything still in the composition
+        // is exactly where it was. Seeking anyway spent a decode per event on
+        // an identical frame, and that storm is what the drag was stuttering
+        // against.
+        guard LiveTransformStore.shared.hiddenClipID != id else { return }
         playback.refreshFrame()
     }
 
@@ -110,6 +116,7 @@ extension EditorState {
     func commitTransform(_ id: UUID, to value: ClipTransform) {
         LiveTransformStore.shared.setDragging(false)
         LiveTransformStore.shared.setHidden(nil)
+        playback.endRefresh()
         guard var clip = project.clip(id) else {
             LiveTransformStore.shared.set(nil, for: id)
             return
@@ -128,6 +135,7 @@ extension EditorState {
         LiveTransformStore.shared.setDragging(false)
         LiveTransformStore.shared.setHidden(nil)
         LiveTransformStore.shared.set(nil, for: id)
+        playback.endRefresh()
         playback.refreshFrame()
     }
 

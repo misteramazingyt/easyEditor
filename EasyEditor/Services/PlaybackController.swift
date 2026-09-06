@@ -26,6 +26,8 @@ final class PlaybackController: ObservableObject {
     /// playhead back to the start of the timeline.
     private var isInstalling = false
     private var redisplayNudge = false
+    /// Where the playhead really is, across a run of redisplay seeks.
+    private var redisplayAnchor: Double?
     private var seekInFlight = false
     private var pendingSeek: Double?
 
@@ -34,7 +36,8 @@ final class PlaybackController: ObservableObject {
         let interval = CMTime(value: 1, timescale: 30)
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
-                guard let self, !self.isScrubbing, !self.isInstalling else { return }
+                guard let self, !self.isScrubbing, !self.isInstalling,
+                      self.redisplayAnchor == nil else { return }
                 self.currentTime = max(0, time.seconds)
             }
         }
@@ -138,7 +141,19 @@ final class PlaybackController: ObservableObject {
     func refreshFrame() {
         guard hasContent, !isPlaying else { return }
         redisplayNudge.toggle()
-        requestSeek(to: currentTime + (redisplayNudge ? 1.0 / 600 : 0))
+        // Against `currentTime` this would creep: the seek lands a nudge
+        // ahead, the time observer reads that back, and the next refresh
+        // starts from there. Over a drag the playhead walks forward, and for a
+        // clip with keyframes that quietly changes the framing underneath the
+        // one being dragged. Anchor it instead.
+        let anchor = redisplayAnchor ?? currentTime
+        redisplayAnchor = anchor
+        requestSeek(to: anchor + (redisplayNudge ? 1.0 / 600 : 0))
+    }
+
+    /// Let the playhead be read from the player again.
+    func endRefresh() {
+        redisplayAnchor = nil
     }
 
     /// Scrub: coalesces rapid seeks so the player never falls behind the drag.
