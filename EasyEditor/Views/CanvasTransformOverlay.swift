@@ -20,9 +20,19 @@ struct CanvasTransformOverlay: View {
     /// on every event, so the box and the picture come off the same number.
     @State private var dragging: (id: UUID, value: ClipTransform)?
 
+    /// The canvas, named so gestures can measure in it.
+    ///
+    /// Every handle sits inside a container that moves, resizes and rotates
+    /// with the box, so translations read in a handle's own space are measured
+    /// against a ruler that is being dragged along with the finger. That is
+    /// what made scaling run away: the factor divided by the box's *current*
+    /// size, which was shrinking, so each point of finger bought more shrink
+    /// than the last and the whole thing was sucked toward zero.
+    private static let space = "easyeditor.canvas"
+
     private enum Gesture: Equatable {
         case move(startCenter: CGPoint)
-        case scale(handle: Handle, startScale: Double, startHeight: Double)
+        case scale(handle: Handle, startScale: Double, startHeight: Double, startBox: CGRect)
         case rotate(startRotation: Double, startAngle: Double)
     }
 
@@ -78,6 +88,7 @@ struct CanvasTransformOverlay: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .coordinateSpace(name: Self.space)
         }
     }
 
@@ -221,7 +232,7 @@ struct CanvasTransformOverlay: View {
     }
 
     private func moveGesture(clip: TimelineClip, canvas: CGRect) -> some SwiftUI.Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
             .onChanged { value in
                 begin(clip)
                 let start: CGPoint
@@ -241,32 +252,43 @@ struct CanvasTransformOverlay: View {
 
     private func scaleGesture(clip: TimelineClip, handle: Handle,
                               canvas: CGRect) -> some SwiftUI.Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
             .onChanged { value in
                 begin(clip)
                 let startScale: Double
                 let startHeight: Double
-                if case .scale(_, let s, let h) = gesture {
+                let startBox: CGRect
+                if case .scale(_, let s, let h, let b) = gesture {
                     startScale = s
                     startHeight = h
+                    startBox = b
                 } else {
                     let t = dragging?.value ?? editor.liveTransform(of: clip)
+                    guard let box = screenFrame(of: clip, canvas: canvas),
+                          box.width > 1, box.height > 1 else { return }
                     startScale = t.scale
                     startHeight = t.heightScale
-                    gesture = .scale(handle: handle, startScale: startScale, startHeight: startHeight)
+                    startBox = box
+                    gesture = .scale(handle: handle, startScale: startScale,
+                                     startHeight: startHeight, startBox: box)
                 }
-                guard let box = screenFrame(of: clip, canvas: canvas),
-                      box.width > 1, box.height > 1 else { return }
-                // Each handle reads as "how much further out from the centre",
-                // so the opposite side stays where the finger expects it.
-                let outX = value.translation.width * handle.unit.x
-                let outY = value.translation.height * handle.unit.y
-                let widthFactor = 1 + outX * 2 / box.width
-                let heightFactor = 1 + outY * 2 / box.height
+
+                // How much further out from the centre the handle now is, as a
+                // proportion of where it started. A ratio rather than a sum:
+                // it behaves the same at any size, and pulling toward the
+                // centre approaches zero smoothly instead of diving into it.
+                let halfWidth = max(1, startBox.width / 2)
+                let halfHeight = max(1, startBox.height / 2)
+                let outX = halfWidth + value.translation.width * handle.unit.x
+                let outY = halfHeight + value.translation.height * handle.unit.y
+                let widthFactor = max(0.02, outX / halfWidth)
+                let heightFactor = max(0.02, outY / halfHeight)
+
                 drag(clip) { t in
                     if handle.isCorner {
-                        // Corners keep the aspect: one factor drives both.
-                        let factor = 1 + (outX + outY) / max(1, hypot(box.width, box.height))
+                        // Corners keep the aspect: the diagonal drives both.
+                        let reach = hypot(outX, outY) / hypot(halfWidth, halfHeight)
+                        let factor = max(0.02, reach)
                         let ratio = startHeight / max(0.0001, startScale)
                         t.scale = min(8, max(0.02, startScale * factor))
                         t.scaleY = startHeight == startScale ? nil : t.scale * ratio
@@ -282,7 +304,7 @@ struct CanvasTransformOverlay: View {
     }
 
     private func rotateGesture(clip: TimelineClip, box: CGRect) -> some SwiftUI.Gesture {
-        DragGesture(minimumDistance: 2)
+        DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.space))
             .onChanged { value in
                 begin(clip)
                 let centre = CGPoint(x: box.midX, y: box.midY)
