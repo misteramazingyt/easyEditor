@@ -222,9 +222,11 @@ struct EditorView: View {
             AutoBRollSheet().environmentObject(editor)
         }
         .sheet(isPresented: $showQuotes) {
-            QuoteSheet { url, placement in
+            QuoteSheet(onInsert: { url, placement in
                 await editor.importWebImage(from: url, placement: placement)
-            }
+            }, onInsertData: { data, placement in
+                editor.addImage(data: data, placement: placement)
+            })
         }
         .sheet(isPresented: $showURLCapture) {
             URLCaptureSheet { data, placement in
@@ -232,9 +234,11 @@ struct EditorView: View {
             }
         }
         .sheet(isPresented: $showMyQuotes) {
-            MyQuotesSheet { url, placement in
+            MyQuotesSheet(onInsert: { url, placement in
                 await editor.importWebImage(from: url, placement: placement)
-            }
+            }, onInsertData: { data, placement in
+                editor.addImage(data: data, placement: placement)
+            })
         }
         .fullScreenCover(isPresented: $showFullscreen) {
             ZStack(alignment: .topTrailing) {

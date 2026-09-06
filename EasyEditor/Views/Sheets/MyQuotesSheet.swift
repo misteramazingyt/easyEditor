@@ -1,10 +1,13 @@
 import SwiftUI
+import UIKit
 
 /// My Quotes: semantic search over the misteramazing card collection, with a
 /// preview of the card and a randomized style per search.
 struct MyQuotesSheet: View {
     /// Downloads the card and places it at the playhead; true on success.
     let onInsert: (URL, OverlayPlacement) async -> Bool
+    /// A cropped scan goes in as data rather than by URL.
+    var onInsertData: ((Data, OverlayPlacement) -> Bool)?
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage(DesktopLibrarySettings.urlKey) private var serverURL = ""
@@ -37,6 +40,11 @@ struct MyQuotesSheet: View {
                     content
                 }
             }
+        .sheet(item: $cropping) { pending in
+            ImageCropSheet(image: pending.image) { data in
+                if onInsertData?(data, pending.placement) == true { dismiss() }
+            }
+        }
             .navigationTitle("MY QUOTES")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -259,15 +267,31 @@ struct MyQuotesSheet: View {
 
     private func insert() {
         guard let service, let quote = selected, !isInserting else { return }
+        fetchForCrop(service.imageURL(qid: quote.qid, style: quote.style),
+                     placement: OverlayPlacement(centerX: 0.5, centerY: 0.5,
+                                                 widthFraction: 0.9))
+    }
+    /// A downloaded scan waiting to be framed before it goes in.
+    @State private var cropping: PendingCrop?
+
+    private struct PendingCrop: Identifiable {
+        let id = UUID()
+        let image: UIImage
+        let placement: OverlayPlacement
+    }
+
+    /// Fetch first, frame second: the scan is whatever the renderer produced,
+    /// which usually carries margin you were not quoting.
+    private func fetchForCrop(_ url: URL, placement: OverlayPlacement) {
         isInserting = true
         Task {
-            let ok = await onInsert(
-                service.imageURL(qid: quote.qid, style: quote.style),
-                OverlayPlacement(centerX: 0.5, centerY: 0.5, widthFraction: 0.9))
-            isInserting = false
-            if ok { dismiss() }
+            defer { isInserting = false }
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let image = UIImage(data: data) else { return }
+            cropping = PendingCrop(image: image, placement: placement)
         }
     }
+
 
     /// Re-roll this card's style without re-running the search.
     private func shuffleStyle() {

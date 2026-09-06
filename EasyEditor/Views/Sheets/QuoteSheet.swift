@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Quote browser: natural-language search over the greatBooks corpus (Gemini
 /// on the desktop server), author → work → quote drilldown, deterministic
@@ -6,6 +7,8 @@ import SwiftUI
 struct QuoteSheet: View {
     /// Downloads the image and places it at the playhead; true on success.
     let onInsert: (URL, OverlayPlacement) async -> Bool
+    /// A cropped scan goes in as data rather than by URL.
+    var onInsertData: ((Data, OverlayPlacement) -> Bool)?
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage(DesktopLibrarySettings.urlKey) private var serverURL = ""
@@ -27,6 +30,27 @@ struct QuoteSheet: View {
 
     @State private var selected: QuoteService.Quote?
     @State private var isInserting = false
+    /// A downloaded scan waiting to be framed before it goes in.
+    @State private var cropping: PendingCrop?
+
+    private struct PendingCrop: Identifiable {
+        let id = UUID()
+        let image: UIImage
+        let placement: OverlayPlacement
+    }
+
+    /// Fetch first, frame second: the scan is whatever the renderer produced,
+    /// which usually carries margin you were not quoting.
+    private func fetchForCrop(_ url: URL, placement: OverlayPlacement) {
+        isInserting = true
+        Task {
+            defer { isInserting = false }
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let image = UIImage(data: data) else { return }
+            cropping = PendingCrop(image: image, placement: placement)
+        }
+    }
+
     @FocusState private var searchFocused: Bool
 
     private var service: QuoteService? {
@@ -46,6 +70,11 @@ struct QuoteSheet: View {
                     unconfigured
                 }
             }
+        .sheet(item: $cropping) { pending in
+            ImageCropSheet(image: pending.image) { data in
+                if onInsertData?(data, pending.placement) == true { dismiss() }
+            }
+        }
             .navigationTitle("QUOTE")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -360,12 +389,7 @@ struct QuoteSheet: View {
                               placement: OverlayPlacement) -> some View {
         Button {
             guard let service, let quote = selected, !isInserting else { return }
-            isInserting = true
-            Task {
-                let ok = await onInsert(service.imageURL(qid: quote.qid, kind: kind), placement)
-                isInserting = false
-                if ok { dismiss() }
-            }
+            fetchForCrop(service.imageURL(qid: quote.qid, kind: kind), placement: placement)
         } label: {
             VStack(spacing: 4) {
                 Label(title.uppercased(), systemImage: systemImage)
