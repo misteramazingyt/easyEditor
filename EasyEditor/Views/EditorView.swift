@@ -136,6 +136,8 @@ struct EditorView: View {
                 case .animate: AnimationSheet()
                 case .composite: CompositingSheet()
                 case .cutout: CutoutSheet()
+                case .luts: LUTSheet()
+                case .silence: SilenceSheet()
                 case .more: ClipInspectorView()
                 }
             }

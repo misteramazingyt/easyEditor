@@ -388,6 +388,17 @@ final class EditorState: ObservableObject {
         if selectedClipID == id { selectedClipID = nil }
     }
 
+    /// Show the processing overlay, with a note about what is happening.
+    func beginProcessing(_ note: String) {
+        isProcessing = true
+        processingNote = note
+    }
+
+    func endProcessing() {
+        isProcessing = false
+        processingNote = nil
+    }
+
     /// Break a group apart so its clips can be hand-tuned.
     func ungroupClip(_ id: UUID) {
         let members = project.linkedClips(with: id)

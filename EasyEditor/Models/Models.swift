@@ -177,6 +177,32 @@ struct MaskSettings: Codable, Equatable {
     var size: Double = 0.5      // fraction of the smaller canvas dimension
     var feather: Double = 0.15  // 0 ... 0.5
     var isInverted = false
+    /// Rectangle masks only: width against height. Optional so saved projects
+    /// decode, and 1 reads as a square rather than the old fixed 1:1.2.
+    var aspect: Double?
+    /// Cut into the picture rather than into the frame.
+    ///
+    /// Unlocked, the mask belongs to the canvas: move the layer and it slides
+    /// along behind a hole that stays put. Locked, the mask belongs to the
+    /// layer — it is applied before the layer is placed, so the two travel
+    /// together and you are moving a masked picture rather than a picture
+    /// behind a mask.
+    var isLocked: Bool?
+
+    var aspectRatio: Double {
+        get { max(0.1, min(10, aspect ?? 1)) }
+        set { aspect = max(0.1, min(10, newValue)) }
+    }
+    var locked: Bool { isLocked ?? false }
+}
+
+/// One LUT in a clip's stack, and how much of it to let through.
+struct LUTLayer: Codable, Equatable, Identifiable {
+    var id = UUID()
+    /// Bundled LUT id.
+    var lut: String
+    /// 0…1, mixed back against what the stack had produced so far.
+    var opacity: Double = 1
 }
 
 // MARK: - Filters (TikTok filter parity, Core Image based)

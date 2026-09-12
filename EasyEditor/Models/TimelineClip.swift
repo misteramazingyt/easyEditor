@@ -49,6 +49,9 @@ struct TimelineClip: Identifiable, Codable, Equatable {
     var isMuted = false
 
     var filter: FilterPreset = .none
+    /// Colour LUTs, applied bottom to top, each mixed in by its own amount.
+    /// Optional so saved projects decode.
+    var luts: [LUTLayer]?
     var adjustments = Adjustments()
     var rotationQuarterTurns: Int = 0
     var isFlippedH = false

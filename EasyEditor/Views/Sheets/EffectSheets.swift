@@ -191,19 +191,40 @@ struct MaskSheet: View {
             if mask != nil {
                 Group {
                     maskSlider("Size", keyPath: \.size, range: 0.1...1)
+                    if mask?.shape == .rectangle {
+                        maskSlider("Width vs height", keyPath: \.aspectRatio, range: 0.25...4)
+                    }
                     maskSlider("Feather", keyPath: \.feather, range: 0...0.5)
                     maskSlider("Horizontal", keyPath: \.centerX, range: 0...1)
                     maskSlider("Vertical", keyPath: \.centerY, range: 0...1)
                 }
                 .padding(.horizontal, 20)
-                Toggle("Invert", isOn: Binding(
-                    get: { mask?.isInverted ?? false },
-                    set: { v in
-                        if let id = editor.selectedClipID {
-                            editor.mutate(id) { $0.mask?.isInverted = v }
+                VStack(spacing: 10) {
+                    Toggle("Invert", isOn: Binding(
+                        get: { mask?.isInverted ?? false },
+                        set: { v in
+                            if let id = editor.selectedClipID {
+                                editor.mutate(id) { $0.mask?.isInverted = v }
+                            }
+                        }
+                    ))
+                    Toggle(isOn: Binding(
+                        get: { mask?.locked ?? false },
+                        set: { v in
+                            if let id = editor.selectedClipID {
+                                editor.mutate(id) { $0.mask?.isLocked = v }
+                            }
+                        }
+                    )) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Lock to the picture")
+                            Text(mask?.locked == true
+                                 ? "The mask travels with the layer."
+                                 : "The layer moves behind a hole that stays put.")
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
                     }
-                ))
+                }
                 .padding(.horizontal, 20)
             } else {
                 Text("Pick a shape to mask this clip")

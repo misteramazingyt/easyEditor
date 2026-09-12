@@ -3,6 +3,7 @@ import SwiftUI
 /// Which tool sheet is open for the selected clip.
 enum ClipTool: String, Identifiable {
     case speed, volume, filters, effects, adjust, retouch, mask, more
+    case luts, silence
     case inOut, animate, composite, cutout
     var id: String { rawValue }
 }
@@ -74,6 +75,12 @@ struct SelectedClipToolbar: View {
         }
         if clip.hasAudio {
             tile("Volume", "speaker.wave.2") { activeTool = .volume }
+        }
+        if clip.hasAudio {
+            tile("Silence", "waveform.badge.minus") { activeTool = .silence }
+        }
+        if clip.kind == .video || clip.kind == .image {
+            tile("Colour", "swatchpalette") { activeTool = .luts }
         }
         if clip.kind == .video {
             tile("Filters", "camera.filters") { activeTool = .filters }

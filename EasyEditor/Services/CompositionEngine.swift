@@ -604,6 +604,7 @@ struct CompositionEngine {
         layer.endOpacity = clip.effectiveOpacity
         layer.isScaffold = clip.isPlaceholder == true
         layer.clipID = clip.id
+        layer.luts = clip.luts ?? []
         layer.baseTransform = clip.baseTransform
         layer.motionKeys = clip.motionKeys
         layer.compositeKeys = clip.compositeKeys

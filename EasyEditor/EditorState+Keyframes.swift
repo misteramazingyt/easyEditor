@@ -300,3 +300,101 @@ extension EditorState {
         return clip.effectiveDuration
     }
 }
+
+// MARK: - Silence
+
+extension EditorState {
+
+    /// Cut the quiet out of a clip.
+    ///
+    /// The timeline ends up carrying the cuts: the clip is replaced by one
+    /// piece per stretch worth keeping, each trimmed to its own part of the
+    /// same file. Nothing is re-encoded and nothing is flattened, so every
+    /// piece can still be trimmed, moved or thrown away afterwards — which is
+    /// the difference between a tool and a one-way render.
+    func removeSilence(_ id: UUID, settings: SilenceDetector.Settings = .default) {
+        guard let clip = project.clip(id), clip.hasAudio, let fileName = clip.fileName else {
+            errorMessage = "Pick a clip with sound on it first."
+            return
+        }
+        guard !isProcessing else { return }
+        beginProcessing("Listening for silence…")
+        let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+        let from = clip.trimStart
+        let to = min(clip.trimEnd, clip.assetDuration)
+
+        Task {
+            defer { endProcessing() }
+            let keeps: [ClosedRange<Double>]
+            do {
+                keeps = try await SilenceDetector.keepRanges(url: url, from: from, to: to,
+                                                             settings: settings)
+            } catch {
+                errorMessage = "Couldn't read the audio: \(error.localizedDescription)"
+                return
+            }
+            guard keeps.count > 1 else {
+                showToast(keeps.isEmpty ? "Nothing but silence" : "No silence to cut")
+                return
+            }
+            applyKeepRanges(to: id, keeps: keeps)
+        }
+    }
+
+    /// Replace one clip with a run of clips, one per kept stretch.
+    private func applyKeepRanges(to id: UUID, keeps: [ClosedRange<Double>]) {
+        guard let original = project.clip(id) else { return }
+        markUndoPoint()
+        let speed = max(0.1, original.speed)
+        let start = project.start(of: original)
+        let removed = (original.trimEnd - original.trimStart)
+            - keeps.reduce(0) { $0 + ($1.upperBound - $1.lowerBound) }
+
+        if original.lane == .primary {
+            // Magnetic: the pieces are consecutive orders, and everything
+            // after shifts up to make room for the extra ones.
+            let extra = keeps.count - 1
+            for other in project.primaryClips where other.order > original.order {
+                var moved = other
+                moved.order += extra
+                project.update(moved)
+            }
+            for (index, range) in keeps.enumerated() {
+                var piece = original
+                if index == 0 {
+                    piece.trimStart = range.lowerBound
+                    piece.trimEnd = range.upperBound
+                    piece.transitionToNext = nil
+                    project.update(piece)
+                } else {
+                    piece.id = UUID()
+                    piece.trimStart = range.lowerBound
+                    piece.trimEnd = range.upperBound
+                    piece.order = original.order + index
+                    piece.transitionToNext = nil
+                    project.append(piece)
+                }
+            }
+        } else {
+            // Connected: the pieces close up against each other in time.
+            var cursor = start
+            for (index, range) in keeps.enumerated() {
+                var piece = original
+                piece.trimStart = range.lowerBound
+                piece.trimEnd = range.upperBound
+                piece.offset = cursor
+                cursor += (range.upperBound - range.lowerBound) / speed
+                if index == 0 {
+                    project.update(piece)
+                } else {
+                    piece.id = UUID()
+                    project.append(piece)
+                }
+            }
+        }
+        selectedClipID = nil
+        showToast("Cut \(keeps.count - 1) silence\(keeps.count == 2 ? "" : "s") · "
+                  + "\(TimeFormat.clock(removed / speed)) shorter")
+        Haptics.success()
+    }
+}

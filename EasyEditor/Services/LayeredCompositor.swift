@@ -18,6 +18,7 @@ struct CompositorLayer {
     var startScale: CGFloat = 1
     var endScale: CGFloat = 1
     var filter: FilterPreset = .none
+    var luts: [LUTLayer] = []
     var adjustments = Adjustments()
     var rotationQuarterTurns: Int = 0
     var isFlippedH = false
@@ -254,6 +255,13 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                     y: (size.height - extent.height * scale) / 2))
             image = image.transformed(by: fitted)
 
+            // 3a. A locked mask is cut into the picture itself, while it is
+            //     still sitting square in the frame — so when the transform
+            //     below moves the layer, the hole goes with it.
+            if let mask = layer.mask, mask.locked {
+                image = Self.applyMask(mask, to: image, canvas: image.extent)
+            }
+
             // 3b. Free framing from the canvas box, animated if it has keys.
             //     Applied about the fitted picture's own centre, so scale 1 at
             //     centre (0.5, 0.5) is exactly the fit above and an untouched
@@ -277,6 +285,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
 
             // 4. Per-clip filter + adjustments.
             image = Self.applyFilter(layer.filter, to: image)
+            image = Self.applyLUTs(layer.luts, to: image)
             if !layer.adjustments.isIdentity {
                 let adj = layer.adjustments
                 if adj.brightness != 0 || adj.contrast != 1 || adj.saturation != 1 {
@@ -327,7 +336,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             if let effect = layer.effect {
                 image = Self.applyEffect(effect, to: image, canvas: canvas)
             }
-            if let mask = layer.mask {
+            if let mask = layer.mask, !mask.locked {
                 image = Self.applyMask(mask, to: image, canvas: canvas)
             }
 
@@ -431,6 +440,10 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             if motion.glitchSeed != 0 {
                 image = Self.applyGlitch(to: image, shift: motion.glitchShift)
             }
+            if let mask = overlay.mask, mask.locked {
+                image = Self.applyMask(mask, to: image, canvas: image.extent)
+            }
+
             // The glass goes on before placement, while the caption is still
             // its own little rectangle: the tube belongs to the box, not to
             // the canvas, so its curvature bends the box's own edges.
@@ -442,7 +455,7 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
             // The mask is in canvas coordinates, so it goes on after the
             // overlay has been placed rather than while it is still its own
             // little picture at the origin.
-            if let mask = overlay.mask {
+            if let mask = overlay.mask, !mask.locked {
                 image = Self.applyMask(mask, to: image, canvas: canvas)
             }
             if let compositing = overlay.compositing, compositing.effect != .none {
@@ -556,6 +569,40 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
         // The tube is opaque; keep the caption's own silhouette so the corners
         // the curvature bends away stay clear of the picture behind it.
         return glass.cropped(to: box)
+    }
+
+    /// Run the LUT stack, bottom to top.
+    ///
+    /// Each one grades what the stack has produced so far and is mixed back
+    /// against it by its own amount, so a stack reads the way stacked
+    /// adjustment layers do: a base grade at full strength, a look over it at
+    /// a third, and so on. Anything at zero is skipped rather than mixed.
+    private static func applyLUTs(_ luts: [LUTLayer], to input: CIImage) -> CIImage {
+        guard !luts.isEmpty else { return input }
+        var image = input
+        for layer in luts {
+            let amount = max(0, min(1, layer.opacity))
+            guard amount > 0.004, let cube = LUTLibrary.cube(layer.lut) else { continue }
+            guard let graded = CIFilter(name: "CIColorCubeWithColorSpace", parameters: [
+                "inputCubeDimension": cube.dimension,
+                "inputCubeData": cube.data,
+                "inputColorSpace": CGColorSpaceCreateDeviceRGB(),
+                kCIInputImageKey: image,
+            ])?.outputImage, !graded.extent.isEmpty else { continue }
+            if amount >= 0.999 {
+                image = graded
+            } else {
+                let a = CGFloat(amount)
+                let faded = graded.applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: a, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: a, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: a, w: 0),
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: a),
+                ])
+                image = faded.composited(over: image).cropped(to: image.extent)
+            }
+        }
+        return image
     }
 
     private static func applyMotion(_ motion: MotionEvaluator.MotionState,
@@ -785,15 +832,24 @@ final class LayeredCompositor: NSObject, AVVideoCompositing {
                 "inputColor1": black,
             ])
         case .rectangle:
-            let rect = CGRect(x: cx - radius, y: cy - radius * 1.2,
-                              width: radius * 2, height: radius * 2.4)
-            maskImage = CIImage.empty().applyingFilter("CIRoundedRectangleGenerator", parameters: [
+            let rect = CGRect(x: cx - radius * CGFloat(mask.aspectRatio),
+                              y: cy - radius,
+                              width: radius * 2 * CGFloat(mask.aspectRatio),
+                              height: radius * 2)
+            // The generator's image ends at the rectangle, and clamping that
+            // extent smears its edge pixels out along both axes — white bands
+            // north, south, east and west, which is a cross rather than a box.
+            // Lay it on an endless black field instead, which is what the
+            // blur needs to spread into anyway.
+            let plate = CIFilter(name: "CIRoundedRectangleGenerator", parameters: [
                 "inputExtent": CIVector(cgRect: rect),
-                kCIInputRadiusKey: 14,
+                kCIInputRadiusKey: min(14, radius * 0.4),
                 kCIInputColorKey: white,
-            ])
-            .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: feather / 2])
+            ])?.outputImage?.cropped(to: rect)
+            let field = CIImage(color: black).cropped(to: canvas)
+            maskImage = (plate?.composited(over: field) ?? field)
+                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: feather / 2])
+                .cropped(to: canvas)
         case .linear:
             // White below the line, fading across the feather band.
             maskImage = CIImage.empty().applyingFilter("CISmoothLinearGradient", parameters: [
