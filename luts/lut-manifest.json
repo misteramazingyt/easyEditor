@@ -7,2487 +7,1177 @@
    "strength": 0,
    "size": 33,
    "offset": 0,
-   "length": 107811,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 107811
   },
   {
-   "id": "augusta-16",
+   "id": "augusta-1",
    "name": "Augusta",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 107811,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "augusta-16",
+   "id": "augusta-2",
    "name": "Augusta",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 120099,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "augusta-16",
+   "id": "augusta-3",
    "name": "Augusta",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 132387,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "augusta-16",
+   "id": "augusta-4",
    "name": "Augusta",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 144675,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "augusta-16",
+   "id": "augusta-5",
    "name": "Augusta",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 156963,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "blackwood-16",
+   "id": "blackwood-1",
    "name": "Blackwood",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 169251,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "blackwood-16",
+   "id": "blackwood-2",
    "name": "Blackwood",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 181539,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "blackwood-16",
+   "id": "blackwood-3",
    "name": "Blackwood",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 193827,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "blackwood-16",
+   "id": "blackwood-4",
    "name": "Blackwood",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 206115,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "blackwood-16",
+   "id": "blackwood-5",
    "name": "Blackwood",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 218403,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "carnarvon-16",
+   "id": "carnarvon-1",
    "name": "Carnarvon",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 230691,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "carnarvon-16",
+   "id": "carnarvon-2",
    "name": "Carnarvon",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 242979,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "carnarvon-16",
+   "id": "carnarvon-3",
    "name": "Carnarvon",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 255267,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "carnarvon-16",
+   "id": "carnarvon-4",
    "name": "Carnarvon",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 267555,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "carnarvon-16",
+   "id": "carnarvon-5",
    "name": "Carnarvon",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 279843,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "columbia-16",
+   "id": "columbia-1",
    "name": "Columbia",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 292131,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "columbia-16",
+   "id": "columbia-2",
    "name": "Columbia",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 304419,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "columbia-16",
+   "id": "columbia-3",
    "name": "Columbia",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 316707,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "columbia-16",
+   "id": "columbia-4",
    "name": "Columbia",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 328995,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "columbia-16",
+   "id": "columbia-5",
    "name": "Columbia",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 341283,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "cumberland-16",
+   "id": "cumberland-1",
    "name": "Cumberland",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 353571,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "cumberland-16",
+   "id": "cumberland-2",
    "name": "Cumberland",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 365859,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "cumberland-16",
+   "id": "cumberland-3",
    "name": "Cumberland",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 378147,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "cumberland-16",
+   "id": "cumberland-4",
    "name": "Cumberland",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 390435,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "cumberland-16",
+   "id": "cumberland-5",
    "name": "Cumberland",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 402723,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "dufferin-16",
+   "id": "dufferin-1",
    "name": "Dufferin",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 415011,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "dufferin-16",
+   "id": "dufferin-2",
    "name": "Dufferin",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 427299,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "dufferin-16",
+   "id": "dufferin-3",
    "name": "Dufferin",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 439587,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "dufferin-16",
+   "id": "dufferin-4",
    "name": "Dufferin",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 451875,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "dufferin-16",
+   "id": "dufferin-5",
    "name": "Dufferin",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 464163,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elgin-16",
+   "id": "elgin-1",
    "name": "Elgin",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 476451,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elgin-16",
+   "id": "elgin-2",
    "name": "Elgin",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 488739,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elgin-16",
+   "id": "elgin-3",
    "name": "Elgin",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 501027,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elgin-16",
+   "id": "elgin-4",
    "name": "Elgin",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 513315,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elgin-16",
+   "id": "elgin-5",
    "name": "Elgin",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 525603,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elliot-16",
+   "id": "elliot-1",
    "name": "Elliot",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 537891,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elliot-16",
+   "id": "elliot-2",
    "name": "Elliot",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 550179,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elliot-16",
+   "id": "elliot-3",
    "name": "Elliot",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 562467,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elliot-16",
+   "id": "elliot-4",
    "name": "Elliot",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 574755,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "elliot-16",
+   "id": "elliot-5",
    "name": "Elliot",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 587043,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "front-16",
+   "id": "front-1",
    "name": "Front",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 599331,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "front-16",
+   "id": "front-2",
    "name": "Front",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 611619,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "front-16",
+   "id": "front-3",
    "name": "Front",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 623907,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "front-16",
+   "id": "front-4",
    "name": "Front",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 636195,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "front-16",
+   "id": "front-5",
    "name": "Front",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 648483,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "liverpool-16",
+   "id": "liverpool-1",
    "name": "Liverpool",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 660771,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "liverpool-16",
+   "id": "liverpool-2",
    "name": "Liverpool",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 673059,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "liverpool-16",
+   "id": "liverpool-3",
    "name": "Liverpool",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 685347,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "liverpool-16",
+   "id": "liverpool-4",
    "name": "Liverpool",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 697635,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "liverpool-16",
+   "id": "liverpool-5",
    "name": "Liverpool",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 709923,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "lorne-16",
+   "id": "lorne-1",
    "name": "Lorne",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 722211,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "lorne-16",
+   "id": "lorne-2",
    "name": "Lorne",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 734499,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "lorne-16",
+   "id": "lorne-3",
    "name": "Lorne",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 746787,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "lorne-16",
+   "id": "lorne-4",
    "name": "Lorne",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 759075,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "lorne-16",
+   "id": "lorne-5",
    "name": "Lorne",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 771363,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "louellen-16",
+   "id": "louellen-1",
    "name": "Louellen",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 783651,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "louellen-16",
+   "id": "louellen-2",
    "name": "Louellen",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 795939,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "louellen-16",
+   "id": "louellen-3",
    "name": "Louellen",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 808227,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "louellen-16",
+   "id": "louellen-4",
    "name": "Louellen",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 820515,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "louellen-16",
+   "id": "louellen-5",
    "name": "Louellen",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 832803,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "merivale-16",
+   "id": "merivale-1",
    "name": "Merivale",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 845091,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "merivale-16",
+   "id": "merivale-2",
    "name": "Merivale",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 857379,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "merivale-16",
+   "id": "merivale-3",
    "name": "Merivale",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 869667,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "merivale-16",
+   "id": "merivale-4",
    "name": "Merivale",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 881955,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "merivale-16",
+   "id": "merivale-5",
    "name": "Merivale",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 894243,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "milton-16",
+   "id": "milton-1",
    "name": "Milton",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 906531,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "milton-16",
+   "id": "milton-2",
    "name": "Milton",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 918819,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "milton-16",
+   "id": "milton-3",
    "name": "Milton",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 931107,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "milton-16",
+   "id": "milton-4",
    "name": "Milton",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 943395,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "milton-16",
+   "id": "milton-5",
    "name": "Milton",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 955683,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "moody-16",
+   "id": "moody-1",
    "name": "Moody",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 967971,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "moody-16",
+   "id": "moody-2",
    "name": "Moody",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 980259,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "moody-16",
+   "id": "moody-3",
    "name": "Moody",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 992547,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "moody-16",
+   "id": "moody-4",
    "name": "Moody",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1004835,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "moody-16",
+   "id": "moody-5",
    "name": "Moody",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1017123,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "mowat-16",
+   "id": "mowat-1",
    "name": "Mowat",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1029411,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "mowat-16",
+   "id": "mowat-2",
    "name": "Mowat",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1041699,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "mowat-16",
+   "id": "mowat-3",
    "name": "Mowat",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1053987,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "mowat-16",
+   "id": "mowat-4",
    "name": "Mowat",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1066275,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "mowat-16",
+   "id": "mowat-5",
    "name": "Mowat",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1078563,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "napanee-16",
+   "id": "napanee-1",
    "name": "Napanee",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1090851,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "napanee-16",
+   "id": "napanee-2",
    "name": "Napanee",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1103139,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "napanee-16",
+   "id": "napanee-3",
    "name": "Napanee",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1115427,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "napanee-16",
+   "id": "napanee-4",
    "name": "Napanee",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1127715,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "napanee-16",
+   "id": "napanee-5",
    "name": "Napanee",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1140003,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "oakland-16",
+   "id": "oakland-1",
    "name": "Oakland",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1152291,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "oakland-16",
+   "id": "oakland-2",
    "name": "Oakland",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1164579,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "oakland-16",
+   "id": "oakland-3",
    "name": "Oakland",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1176867,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "oakland-16",
+   "id": "oakland-4",
    "name": "Oakland",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1189155,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "oakland-16",
+   "id": "oakland-5",
    "name": "Oakland",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1201443,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "pearce-16",
+   "id": "pearce-1",
    "name": "Pearce",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1213731,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "pearce-16",
+   "id": "pearce-2",
    "name": "Pearce",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1226019,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "pearce-16",
+   "id": "pearce-3",
    "name": "Pearce",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1238307,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "pearce-16",
+   "id": "pearce-4",
    "name": "Pearce",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1250595,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "pearce-16",
+   "id": "pearce-5",
    "name": "Pearce",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1262883,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "peele-16",
+   "id": "peele-1",
    "name": "Peele",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1275171,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "peele-16",
+   "id": "peele-2",
    "name": "Peele",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1287459,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "peele-16",
+   "id": "peele-3",
    "name": "Peele",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1299747,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "peele-16",
+   "id": "peele-4",
    "name": "Peele",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1312035,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "peele-16",
+   "id": "peele-5",
    "name": "Peele",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1324323,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "quayside-16",
+   "id": "quayside-1",
    "name": "Quayside",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1336611,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "quayside-16",
+   "id": "quayside-2",
    "name": "Quayside",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1348899,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "quayside-16",
+   "id": "quayside-3",
    "name": "Quayside",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1361187,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "quayside-16",
+   "id": "quayside-4",
    "name": "Quayside",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1373475,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "quayside-16",
+   "id": "quayside-5",
    "name": "Quayside",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1385763,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "queens-16",
+   "id": "queens-1",
    "name": "Queens",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1398051,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "queens-16",
+   "id": "queens-2",
    "name": "Queens",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1410339,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "queens-16",
+   "id": "queens-3",
    "name": "Queens",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1422627,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "queens-16",
+   "id": "queens-4",
    "name": "Queens",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1434915,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "queens-16",
+   "id": "queens-5",
    "name": "Queens",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1447203,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "robson-16",
+   "id": "robson-1",
    "name": "Robson",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1459491,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "robson-16",
+   "id": "robson-2",
    "name": "Robson",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1471779,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "robson-16",
+   "id": "robson-3",
    "name": "Robson",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1484067,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "robson-16",
+   "id": "robson-4",
    "name": "Robson",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1496355,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "robson-16",
+   "id": "robson-5",
    "name": "Robson",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1508643,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "windsor-16",
+   "id": "windsor-1",
    "name": "Windsor",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1520931,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "windsor-16",
+   "id": "windsor-2",
    "name": "Windsor",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1533219,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "windsor-16",
+   "id": "windsor-3",
    "name": "Windsor",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1545507,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "windsor-16",
+   "id": "windsor-4",
    "name": "Windsor",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1557795,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "windsor-16",
+   "id": "windsor-5",
    "name": "Windsor",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1570083,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-blue-16",
+   "id": "orange-and-blue-1",
    "name": "Orange and Blue",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1582371,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-blue-16",
+   "id": "orange-and-blue-2",
    "name": "Orange and Blue",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1594659,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-blue-16",
+   "id": "orange-and-blue-3",
    "name": "Orange and Blue",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1606947,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-blue-16",
+   "id": "orange-and-blue-4",
    "name": "Orange and Blue",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1619235,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-blue-16",
+   "id": "orange-and-blue-5",
    "name": "Orange and Blue",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1631523,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-teal-16",
+   "id": "orange-and-teal-1",
    "name": "Orange and Teal",
    "family": "Orange & Teal",
    "strength": 1,
    "size": 16,
    "offset": 1643811,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-teal-16",
+   "id": "orange-and-teal-2",
    "name": "Orange and Teal",
    "family": "Orange & Teal",
    "strength": 2,
    "size": 16,
    "offset": 1656099,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-teal-16",
+   "id": "orange-and-teal-3",
    "name": "Orange and Teal",
    "family": "Orange & Teal",
    "strength": 3,
    "size": 16,
    "offset": 1668387,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-teal-16",
+   "id": "orange-and-teal-4",
    "name": "Orange and Teal",
    "family": "Orange & Teal",
    "strength": 4,
    "size": 16,
    "offset": 1680675,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   },
   {
-   "id": "orange-and-teal-16",
+   "id": "orange-and-teal-5",
    "name": "Orange and Teal",
    "family": "Orange & Teal",
    "strength": 5,
    "size": 16,
    "offset": 1692963,
-   "length": 12288,
-   "domainMin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "domainMax": [
-    1.0,
-    1.0,
-    1.0
-   ]
+   "length": 12288
   }
  ]
 }
