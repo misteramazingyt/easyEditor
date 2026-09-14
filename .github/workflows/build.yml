@@ -74,6 +74,24 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      # The .drt format is undocumented and reverse-engineered, so the exporter
+      # is guarded by running it: this builds the real thing as a command-line
+      # tool, writes a timeline with it, and checks the bytes against what
+      # Resolve itself writes. It needs no simulator and no signing.
+      - name: Check the Resolve timeline exporter
+        run: |
+          mkdir -p build/drtcheck
+          cp EasyEditor/Resources/drt-*.xml build/drtcheck/
+          swiftc -O -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
+            EasyEditor/Services/DRTBlobs.swift \
+            EasyEditor/Services/ZipWriter.swift \
+            EasyEditor/Services/DRTExporter.swift \
+            Tools/DRTCheck/main.swift \
+            -o build/drtcheck/drtcheck
+          cd build/drtcheck
+          ./drtcheck check.drt | tee blobs.txt
+          python3 "$GITHUB_WORKSPACE/Tools/DRTCheck/check_drt.py" blobs.txt check.drt
+
       - name: Generate Xcode project
         run: xcodegen generate
 

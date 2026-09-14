@@ -6,3 +6,7 @@
 *.jpeg binary
 *.mov binary
 *.mp4 binary
+
+# Bytes Resolve wrote, and the DRT exporter is verified against them.
+# Keep them exactly as they are.
+EasyEditor/Resources/drt-*.xml -text

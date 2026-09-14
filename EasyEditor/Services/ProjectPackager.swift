@@ -60,14 +60,33 @@ enum ProjectPackager {
                       atomically: true, encoding: .utf8)
 
         var notes: [String] = []
-        if !mattes.isEmpty {
-            notes.append("\(mattes.count) keyed take\(mattes.count == 1 ? "" : "s") came over as a compound clip "
-                         + "with its matte — one step in Resolve to switch the transparency on.")
+
+        // The .drt is the one to import: FCPXML cannot carry a composite mode,
+        // so the key on a take has to be switched on by hand or by script
+        // afterwards, whereas Resolve's own format arrives with it already set.
+        // The FCPXML stays in the box as the readable fallback.
+        var wroteDRT = false
+        do {
+            let package = await DRTExporter.timeline(for: project, media: media)
+            try DRTExporter.write(package.timeline,
+                                  to: staging.appendingPathComponent("\(folderName).drt"))
+            notes.append(contentsOf: package.notes)
+            wroteDRT = true
+        } catch {
+            Log.engine.error("DRT export failed: \(error.localizedDescription)")
+            notes.append("The Resolve timeline (.drt) couldn't be written, so only the "
+                         + "FCPXML is here — the keyed takes will need set_matte_modes.py.")
+        }
+        if !mattes.isEmpty, !wroteDRT {
+            notes.append("\(mattes.count) keyed take\(mattes.count == 1 ? "" : "s") came over "
+                         + "with a matte beside it — two dropdowns in Resolve, or one run of "
+                         + "set_matte_modes.py, to switch the transparency on.")
         }
         let titles = project.clips.filter { $0.kind == .title }.count
         if titles > 0 {
-            notes.append("\(titles) text clip\(titles == 1 ? "" : "s") — FCPXML titles don't "
-                         + "survive the trip into Resolve, so these are left out.")
+            notes.append("\(titles) text clip\(titles == 1 ? "" : "s") — Resolve builds its "
+                         + "titles its own way and receives neither format's, so these are "
+                         + "left out.")
         }
         if project.clips.contains(where: { ($0.luts?.isEmpty == false) || $0.filter != .none }) {
             notes.append("Filters and LUTs stay here — Resolve has its own.")
@@ -89,7 +108,7 @@ enum ProjectPackager {
             .write(to: staging.appendingPathComponent("set_matte_modes.py"),
                    atomically: true, encoding: .utf8)
         try readme(project: project, folderName: folderName,
-                   notes: notes, mattes: mattes)
+                   notes: notes, mattes: mattes, wroteDRT: wroteDRT)
             .write(to: staging.appendingPathComponent("README.txt"),
                    atomically: true, encoding: .utf8)
 
@@ -138,23 +157,27 @@ enum ProjectPackager {
 
     // MARK: - What goes in the box
 
+    /// Points both timelines at the media once the archive has been
+    /// unpacked. Neither format can carry a path the app does not know,
+    /// so both are written against a placeholder and rewritten here --
+    /// including inside the .drt's binary blobs, which the exporter
+    /// leaves uncompressed so this can reach into them.
     private static func relinkScript(folderName: String) -> String {
         """
         #!/usr/bin/env python3
-        \"\"\"Point the FCPXML at wherever this folder now lives.
+        \"\"\"Point this export at wherever the folder now lives.
 
-        The export writes media paths relative to the archive ("./Media/x.mov").
-        Resolve resolves those against the XML's own location, which is usually
-        enough. It is not enough when the XML has been moved away from the
-        media, or when an importer insists on absolute paths -- so this rewrites
-        them to absolute file:// URLs pointing at the Media folder next to this
-        script.
+        Two timelines come in the box. The .drt is the one to import -- it is
+        Resolve's own format and carries the composite modes that switch the
+        transparency on. The .fcpxml is the readable fallback. Both refer to the
+        media by path, and neither can know where you unpacked this, so this
+        rewrites both to point at the Media folder beside it.
 
             python3 relink.py                 # rewrite in place
             python3 relink.py --media /path   # media somewhere else
-            python3 relink.py --relative      # put it back to relative paths
+            python3 relink.py --relative      # FCPXML back to relative paths
 
-        A copy of the original is kept as <name>.fcpxml.bak the first time.
+        A copy of each original is kept as <name>.bak the first time.
         \"\"\"
 
         import argparse
@@ -163,12 +186,16 @@ enum ProjectPackager {
         import pathlib
         import re
         import shutil
+        import struct
         import sys
+        import zipfile
         from urllib.parse import unquote, urlparse
 
 
         HERE = os.path.dirname(os.path.abspath(__file__))
         SRC = re.compile(r'src="([^"]*)"')
+        # What the app writes in place of a folder it cannot know the name of.
+        TOKEN = "__EASYEDITOR_MEDIA__"
 
 
         def basename(value):
@@ -195,45 +222,126 @@ enum ProjectPackager {
             return "./Media/" + basename(name)
 
 
+        def relink_fcpxml(path, media_dir, relative):
+            with open(path, encoding="utf-8") as handle:
+                text = handle.read()
+            missing = []
+
+            def replace(match):
+                value = match.group(1)
+                if relative:
+                    return 'src="%s"' % to_relative(value)
+                base = basename(value)
+                if not base:
+                    return match.group(0)
+                if not os.path.exists(os.path.join(media_dir, base)):
+                    missing.append(base)
+                return 'src="%s"' % to_absolute(value, media_dir)
+
+            text, count = SRC.subn(replace, text)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+            return count, missing
+
+
+        # --- the .drt ------------------------------------------------------------
+        #
+        # A .drt is a zip of three XML files. The media path appears twice per clip:
+        # once as plain text in <MediaFilePath>, and once inside a hex-encoded blob
+        # as a protobuf string field. The app writes those blobs uncompressed on
+        # purpose, so this can reach into them without a zstd decoder.
+
+
+        def varint(value):
+            out = bytearray()
+            while True:
+                byte = value & 0x7F
+                value >>= 7
+                out.append(byte | (0x80 if value else 0))
+                if not value:
+                    return bytes(out)
+
+
+        def retarget_blob(blob_hex, media_dir):
+            \"\"\"Swap the directory inside a Clip blob, fixing both length fields.\"\"\"
+            raw = bytearray.fromhex(blob_hex)
+            needle = bytes([10]) + varint(len(TOKEN)) + TOKEN.encode("utf-8")
+            start = raw.find(needle)
+            if start < 0:
+                return blob_hex, 0
+            replacement_dir = media_dir.encode("utf-8")
+            replacement = bytes([10]) + varint(len(replacement_dir)) + replacement_dir
+            raw[start:start + len(needle)] = replacement
+            # The header is [u32 version][u32 length of everything after it].
+            if len(raw) >= 8:
+                body = len(raw) - 8
+                raw[4:8] = struct.pack(">I", body)
+            return bytes(raw).hex(), 1
+
+
+        def relink_drt(path, media_dir):
+            with zipfile.ZipFile(path) as archive:
+                names = archive.namelist()
+                contents = {name: archive.read(name).decode("utf-8") for name in names}
+
+            count = 0
+            missing = []
+            for name, text in contents.items():
+                def path_replace(match):
+                    value = match.group(1)
+                    base = basename(value)
+                    if not base:
+                        return match.group(0)
+                    if not os.path.exists(os.path.join(media_dir, base)):
+                        missing.append(base)
+                    # Resolve wants a plain path here, not a URL.
+                    return "<MediaFilePath>%s</MediaFilePath>" % os.path.join(media_dir, base)
+
+                text, changed = re.subn(r"<MediaFilePath>([^<]*)</MediaFilePath>",
+                                        path_replace, text)
+                count += changed
+
+                def blob_replace(match):
+                    fixed, changed = retarget_blob(match.group(1), media_dir)
+                    return ">%s<" % fixed
+
+                text = re.sub(r">([0-9a-fA-F]{32,})<", blob_replace, text)
+                contents[name] = text
+
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+                for name in names:
+                    archive.writestr(name, contents[name].encode("utf-8"))
+            return count, missing
+
+
         def main():
             parser = argparse.ArgumentParser(description=__doc__)
             parser.add_argument("--media", default=os.path.join(HERE, "Media"),
                                 help="where the media actually is")
             parser.add_argument("--relative", action="store_true",
-                                help="write ./Media/... instead of absolute URLs")
+                                help="write ./Media/... into the FCPXML instead of "
+                                     "absolute URLs; the .drt always takes absolute "
+                                     "paths, so it is left alone")
             args = parser.parse_args()
 
             media_dir = os.path.abspath(args.media)
             if not args.relative and not os.path.isdir(media_dir):
                 sys.exit("No media folder at %s" % media_dir)
 
-            files = glob.glob(os.path.join(HERE, "*.fcpxml"))
-            if not files:
-                sys.exit("No .fcpxml next to this script.")
+            jobs = [(p, relink_fcpxml) for p in glob.glob(os.path.join(HERE, "*.fcpxml"))]
+            if not args.relative:
+                jobs += [(p, relink_drt) for p in glob.glob(os.path.join(HERE, "*.drt"))]
+            if not jobs:
+                sys.exit("No timeline next to this script.")
 
-            for path in files:
+            for path, relink in jobs:
                 backup = path + ".bak"
                 if not os.path.exists(backup):
                     shutil.copy2(path, backup)
-                with open(path, encoding="utf-8") as handle:
-                    text = handle.read()
-
-                missing = []
-
-                def replace(match):
-                    value = match.group(1)
-                    if args.relative:
-                        return 'src="%s"' % to_relative(value)
-                    base = basename(value)
-                    if not base:
-                        return match.group(0)
-                    if not os.path.exists(os.path.join(media_dir, base)):
-                        missing.append(base)
-                    return 'src="%s"' % to_absolute(value, media_dir)
-
-                text, count = SRC.subn(replace, text)
-                with open(path, "w", encoding="utf-8") as handle:
-                    handle.write(text)
+                if relink is relink_fcpxml:
+                    count, missing = relink(path, media_dir, args.relative)
+                else:
+                    count, missing = relink(path, media_dir)
                 print("%s: rewrote %d path%s" % (os.path.basename(path), count,
                                                  "" if count == 1 else "s"))
                 for name in sorted(set(missing)):
@@ -242,10 +350,8 @@ enum ProjectPackager {
 
         if __name__ == "__main__":
             main()
-
         """
     }
-
 
     /// Sets the two blend modes that turn a matte pair into a key.
     ///
@@ -358,71 +464,90 @@ enum ProjectPackager {
     }
 
     private static func readme(project: VideoProject, folderName: String,
-                               notes: [String], mattes: [String]) -> String {
+                               notes: [String], mattes: [String],
+                               wroteDRT: Bool) -> String {
         var text = """
         \(project.name)
         Exported from EasyEditor.
 
         What's here
-          \(folderName).fcpxml   the timeline, FCPXML 1.8
+          \(folderName).drt      the timeline, in Resolve's own format
+          \(folderName).fcpxml   the same edit as FCPXML 1.8, as a fallback
           Media/                 every file the timeline uses
-          relink.py              rewrites the media paths if you move things
+          relink.py              points both at the media, wherever you put it
 
         Getting it into DaVinci Resolve
           1. Unpack this folder somewhere you're happy to leave it.
-          2. Resolve > File > Import > Timeline > Import AAF, EDL, XML...
-          3. Pick the .fcpxml. Leave "Automatically import source clips into
-             media pool" on.
-          4. If Resolve asks where the media is, point it at the Media folder
-             next to the XML.
+          2. Run:  python3 relink.py
+             Neither file can know where you unpacked this, so both are written
+             against a placeholder and this fills in the real paths. Moved the
+             media elsewhere afterwards? Run it again with --media /path.
+          3. Resolve > File > Import > Timeline > Import AAF, EDL, XML...
+             Pick the .drt.
 
-        If the clips come in offline, run:
-            python3 relink.py
-        which rewrites the paths to absolute ones pointing at the Media folder
-        beside it. Moved the media elsewhere? Use --media /path/to/media.
+        Import the .drt, not the .fcpxml. It is Resolve's own format, so it
+        arrives as the timeline it is -- including the composite modes that
+        switch your keyed takes' transparency back on, which no interchange
+        format can carry. The .fcpxml is there because it is the readable,
+        documented one: it carries clip speed and volume that the .drt does
+        not, and it is a working way in if the .drt ever stops being one.
 
 
         """
         if !mattes.isEmpty {
             text += """
-            Turning the transparency back on
+            About the transparency
               Your keyed takes were recorded as HEVC with alpha, which keeps
               them small and which only Apple's decoders read: the alpha sits
               in a layer Resolve on Windows and ffmpeg both ignore, and it is
               premultiplied, so ignoring it fills the key in with black rather
               than merely flattening it.
 
-              So each keyed take arrives with a matte beside it -- an ordinary
+              So each keyed take comes with a matte beside it -- an ordinary
               black-and-white movie, white where you are -- on the track
-              directly below. Resolve composites that natively:
+              directly below. Resolve composites that natively, on the Edit
+              page, with nothing but a pair of blend modes:
 
                   the matte           Composite Mode: Lum
                   the take above it   Composite Mode: Foreground
 
-              Two dropdowns per take, in the Inspector. To have them all set
-              at once, open Resolve's console (Workspace > Console, switch it
-              to Py3) and run:
-
-                  exec(open(r"<this folder>/set_matte_modes.py").read())
-
-              With no timeline open it imports the .fcpxml beside it first, so
-              that one line does the whole job. It pairs each .matte.mov with
-              the take above it, sets both modes, and touches nothing else --
-              running it twice is safe.
-
-              Why a script and not the file itself: no interchange format
-              carries a composite mode into Resolve. Resolve's own FCPXML
-              export doesn't write one, and its native .drt keeps clip settings
-              in undocumented binary blobs. The scripting API is the only way
-              in, so that is what this uses.
 
             """
+            if wroteDRT {
+                text += """
+                  The .drt arrives with both already set. Nothing to do.
+
+                  If you import the .fcpxml instead, FCPXML has no way to carry
+                  a blend mode, so you get the matte and the take on the right
+                  tracks with the modes unset. Two dropdowns per take in the
+                  Inspector, or open Resolve's console (Workspace > Console,
+                  switch it to Py3) and run:
+
+                      exec(open(r"<this folder>/set_matte_modes.py").read())
+
+
+                """
+            } else {
+                text += """
+                  The .drt could not be written this time, so the modes are not
+                  set. Two dropdowns per take in the Inspector, or open
+                  Resolve's console (Workspace > Console, switch it to Py3):
+
+                      exec(open(r"<this folder>/set_matte_modes.py").read())
+
+                  With no timeline open it imports the .fcpxml beside it first,
+                  so that one line does the whole job. It touches nothing but
+                  the modes, so running it twice is safe.
+
+
+                """
+            }
         }
         if !notes.isEmpty {
             text += "What didn't come with it\n"
             for note in notes { text += "  - \(note)\n" }
-            text += "\nEverything else — the cuts, the trims, the lanes, speed "
-                + "and clip volume — is in the XML.\n"
+            text += "\nEverything else — the cuts, the trims, the tracks and "
+                + "the keys — is in the timeline.\n"
         }
         return text
     }
