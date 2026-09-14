@@ -41,6 +41,8 @@ enum FCPXMLExporter {
         let duration: Double
         let hasVideo: Bool
         let hasAudio: Bool
+        /// A keyed take, whose alpha travels beside it as a matte movie.
+        var matteName: String?
     }
 
     /// Everything the XML needs to know about the files, read once.
@@ -70,9 +72,11 @@ enum FCPXMLExporter {
                 size = turned ? CGSize(width: natural.height, height: natural.width) : natural
             }
             let duration = (try? await asset.load(.duration).seconds) ?? clip.assetDuration
+            let keyed = await MatteExporter.hasAlpha(url: url)
             result[clip.id] = Media(clip: clip, fileName: exportName(for: fileName),
                                     size: size, duration: max(0.1, duration),
-                                    hasVideo: video != nil, hasAudio: audio != nil)
+                                    hasVideo: video != nil, hasAudio: audio != nil,
+                                    matteName: keyed ? MatteExporter.matteName(for: fileName) : nil)
         }
         return result
     }
@@ -157,7 +161,29 @@ enum FCPXMLExporter {
 
             """
         }
-        out += formats + assets
+        // A keyed take and its matte belong together, so each becomes a
+        // compound clip holding both: the colour on the spine, the matte on
+        // the lane above it. FCPXML has no way to say "use that as alpha" --
+        // no interchange format does -- so the wiring stays a step you take in
+        // Resolve. But you take it once, inside the compound, and every use of
+        // that compound on the timeline inherits it.
+        var compoundIDs: [UUID: String] = [:]
+        var compounds = ""
+        for clip in project.clips {
+            guard let entry = media[clip.id], let matteName = entry.matteName,
+                  let colourID = assetIDs[clip.id], compoundIDs[clip.id] == nil else { continue }
+            let matteID = "a\(next)"
+            next += 1
+            assets += matteAsset(id: matteID, name: matteName,
+                                 src: "./\(mediaFolder)/\(matteName)",
+                                 duration: entry.duration)
+            let compoundID = "m\(next)"
+            next += 1
+            compoundIDs[clip.id] = compoundID
+            compounds += compound(id: compoundID, colourID: colourID, matteID: matteID,
+                                  entry: entry, matteName: matteName)
+        }
+        out += formats + assets + compounds
         out += "  </resources>\n"
 
         // MARK: The timeline
@@ -229,6 +255,7 @@ enum FCPXMLExporter {
                     && (otherStart < host.end - 0.001 || (isLast && otherStart >= host.start))
                 guard inside else { continue }
                 children += element(for: other, media: media, assetIDs: assetIDs,
+                                    compoundIDs: compoundIDs,
                                     // A child's offset is in its host's own
                                     // time base, which begins at the host's
                                     // in-point — not at zero.
@@ -237,6 +264,7 @@ enum FCPXMLExporter {
             }
             if let clip = host.clip {
                 out += element(for: clip, media: media, assetIDs: assetIDs,
+                               compoundIDs: compoundIDs,
                                offset: host.start, indent: 8, children: children)
             } else {
                 let attributes = "name=\"Gap\" offset=\"\(time(host.start))\" "
@@ -263,12 +291,16 @@ enum FCPXMLExporter {
     /// One clip. Storyline clips carry their timeline offset; connected ones
     /// carry an offset from the clip they hang on, plus the lane they sit in.
     private static func element(for clip: TimelineClip, media: [UUID: Media],
-                                assetIDs: [UUID: String], offset: Double,
-                                indent: Int, children: String = "") -> String {
-        guard let entry = media[clip.id], let assetID = assetIDs[clip.id] else { return "" }
+                                assetIDs: [UUID: String], compoundIDs: [UUID: String],
+                                offset: Double, indent: Int,
+                                children: String = "") -> String {
+        guard let entry = media[clip.id] else { return "" }
         let pad = String(repeating: " ", count: indent)
-        let tag = entry.hasVideo ? "asset-clip" : "audio"
-        var attributes = "ref=\"\(assetID)\" offset=\"\(time(offset))\""
+        // A keyed take is placed as its compound; everything else as itself.
+        let compoundID = compoundIDs[clip.id]
+        guard let ref = compoundID ?? assetIDs[clip.id] else { return "" }
+        let tag = compoundID != nil ? "ref-clip" : (entry.hasVideo ? "asset-clip" : "audio")
+        var attributes = "ref=\"\(ref)\" offset=\"\(time(offset))\""
         attributes += " name=\"\(escape(entry.fileName))\""
         attributes += " start=\"\(time(clip.trimStart))\""
         attributes += " duration=\"\(time(clip.effectiveDuration))\""
@@ -296,5 +328,34 @@ enum FCPXMLExporter {
             return "\(pad)<\(tag) \(attributes)/>\n"
         }
         return "\(pad)<\(tag) \(attributes)>\n\(body)\(pad)</\(tag)>\n"
+    }
+
+    /// The greyscale companion that carries a keyed take's alpha.
+    private static func matteAsset(id: String, name: String, src: String,
+                                   duration: Double) -> String {
+        "    <asset id=\"\(id)\" name=\"\(escape(name))\" src=\"\(escape(src))\" "
+            + "start=\"0s\" duration=\"\(time(duration))\" hasVideo=\"1\" hasAudio=\"0\" "
+            + "format=\"r0\"/>" + newline
+    }
+
+    /// A take and its matte as one compound clip, named after the recording.
+    private static func compound(id: String, colourID: String, matteID: String,
+                                 entry: Media, matteName: String) -> String {
+        let name = URL(fileURLWithPath: entry.fileName)
+            .deletingPathExtension().lastPathComponent
+        let span = time(entry.duration)
+        var out = "    <media id=\"\(id)\" name=\"\(escape(name))\">" + newline
+        out += "      <sequence format=\"r0\" duration=\"\(span)\" tcStart=\"0s\" "
+            + "tcFormat=\"NDF\" audioLayout=\"stereo\" audioRate=\"48k\">" + newline
+        out += "        <spine>" + newline
+        out += "          <asset-clip ref=\"\(colourID)\" offset=\"0s\" "
+            + "name=\"\(escape(entry.fileName))\" start=\"0s\" duration=\"\(span)\">" + newline
+        out += "            <asset-clip ref=\"\(matteID)\" lane=\"1\" offset=\"0s\" "
+            + "name=\"\(escape(matteName))\" start=\"0s\" duration=\"\(span)\"/>" + newline
+        out += "          </asset-clip>" + newline
+        out += "        </spine>" + newline
+        out += "      </sequence>" + newline
+        out += "    </media>" + newline
+        return out
     }
 }

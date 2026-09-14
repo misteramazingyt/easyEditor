@@ -28,6 +28,7 @@ enum ProjectPackager {
 
         // Only the files the timeline actually uses.
         var copied = Set<String>()
+        var mattes: [String] = []
         for clip in project.clips {
             guard let fileName = clip.fileName, !copied.contains(fileName) else { continue }
             let source = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
@@ -36,6 +37,21 @@ enum ProjectPackager {
                 at: source,
                 to: mediaOut.appendingPathComponent(FCPXMLExporter.exportName(for: fileName)))
             copied.insert(fileName)
+
+            // A keyed take carries its alpha in a layer only Apple
+            // decodes. Send the silhouette along as an ordinary
+            // greyscale movie so the transparency can be put back.
+            if await MatteExporter.hasAlpha(url: source) {
+                let matteName = MatteExporter.matteName(for: fileName)
+                do {
+                    try await MatteExporter.write(
+                        from: source,
+                        to: mediaOut.appendingPathComponent(matteName))
+                    mattes.append(matteName)
+                } catch {
+                    Log.engine.error("Matte for \(fileName) failed: \(error.localizedDescription)")
+                }
+            }
         }
 
         let media = await FCPXMLExporter.gather(project: project)
@@ -44,6 +60,10 @@ enum ProjectPackager {
                       atomically: true, encoding: .utf8)
 
         var notes: [String] = []
+        if !mattes.isEmpty {
+            notes.append("\(mattes.count) keyed take\(mattes.count == 1 ? "" : "s") came over as a compound clip "
+                         + "with its matte — one step in Resolve to switch the transparency on.")
+        }
         let titles = project.clips.filter { $0.kind == .title }.count
         if titles > 0 {
             notes.append("\(titles) text clip\(titles == 1 ? "" : "s") — FCPXML titles don't "
@@ -65,7 +85,8 @@ enum ProjectPackager {
         try relinkScript(folderName: folderName)
             .write(to: staging.appendingPathComponent("relink.py"),
                    atomically: true, encoding: .utf8)
-        try readme(project: project, folderName: folderName, notes: notes)
+        try readme(project: project, folderName: folderName,
+                   notes: notes, mattes: mattes)
             .write(to: staging.appendingPathComponent("README.txt"),
                    atomically: true, encoding: .utf8)
 
@@ -223,7 +244,7 @@ enum ProjectPackager {
     }
 
     private static func readme(project: VideoProject, folderName: String,
-                               notes: [String]) -> String {
+                               notes: [String], mattes: [String]) -> String {
         var text = """
         \(project.name)
         Exported from EasyEditor.
@@ -248,6 +269,34 @@ enum ProjectPackager {
 
 
         """
+        if !mattes.isEmpty {
+            text += """
+            Turning the transparency back on
+              Your keyed takes were recorded as HEVC with alpha, which keeps
+              them small and which only Apple's decoders read: the alpha sits
+              in a separate layer that Resolve on Windows, and ffmpeg, both
+              ignore. That layer is premultiplied, so where the background was
+              keyed out the colour is black -- ignore the alpha and the key
+              does not merely vanish, it fills in black.
+
+              So each keyed take arrives as a compound clip named after the
+              recording, holding two things: the picture, and its matte on the
+              lane above -- white where you are, black where you are not.
+
+              To switch it on, once per take:
+                1. Open the compound clip (double-click it in the Media Pool).
+                2. Select the picture, go to the Color page.
+                3. Add the matte as a Layer/Alpha input, and connect it to the
+                   node's Key input, then to Alpha Output.
+                4. Close the compound. Every use of it on the timeline is now
+                   transparent.
+
+              The alternative is ProRes 4444, which carries alpha everywhere
+              and runs about 40 MB a second -- this way the transfer stays
+              small and the step is yours to take only where you need it.
+
+            """
+        }
         if !notes.isEmpty {
             text += "What didn't come with it\n"
             for note in notes { text += "  - \(note)\n" }
