@@ -169,13 +169,13 @@ final class ExportServer: ObservableObject {
         </style>
         <main>
           <h1>\(projectName)</h1>
-          <p class="sub">FCPXML + media, \(megabytes) MB</p>
+          <p class="sub">Resolve timeline + media, \(megabytes) MB</p>
           <p><a class="get" href="/download">Download the archive</a></p>
           <ol>
             <li>Unpack it somewhere you'll leave it.</li>
+            <li>Run <code>python3 relink.py</code> beside it, to fill in the media paths.</li>
             <li>Resolve → File → Import → Timeline → <em>Import AAF, EDL, XML…</em></li>
-            <li>Pick the <code>.fcpxml</code>.</li>
-            <li>If anything comes in offline, run <code>python3 relink.py</code> beside it.</li>
+            <li>Pick the <code>.drt</code> — it comes in with the keys already made.</li>
           </ol>
           \(notes)
         </main>
