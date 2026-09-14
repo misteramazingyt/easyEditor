@@ -16,6 +16,10 @@ import AVFoundation
 enum FCPXMLExporter {
 
     private static let timebase = 600
+    /// Spelled out rather than escaped: this file builds strings inside
+    /// strings, and one more backslash is one more thing to get wrong.
+    private static let newline = "
+"
 
     /// FCPXML time: a rational number of seconds.
     private static func time(_ seconds: Double) -> String {
@@ -238,12 +242,10 @@ enum FCPXMLExporter {
             } else {
                 let attributes = "name=\"Gap\" offset=\"\(time(host.start))\" "
                     + "start=\"0s\" duration=\"\(time(host.duration))\""
+                let open = "        <gap \(attributes)"
                 out += children.isEmpty
-                    ? "        <gap \(attributes)/>
-"
-                    : "        <gap \(attributes)>
-\(children)        </gap>
-"
+                    ? open + "/>" + newline
+                    : open + ">" + newline + children + "        </gap>" + newline
             }
         }
 
