@@ -135,25 +135,39 @@ enum ProjectPackager {
         import argparse
         import glob
         import os
+        import pathlib
         import re
         import shutil
         import sys
-        from urllib.parse import quote, unquote, urlparse
-        from urllib.request import url2pathname
+        from urllib.parse import unquote, urlparse
 
 
         HERE = os.path.dirname(os.path.abspath(__file__))
         SRC = re.compile(r'src="([^"]*)"')
 
 
+        def basename(value):
+            # The filename, from a plain path or a file:// URL, either slash.
+            # A Windows file URL keeps the drive in the netloc rather than the
+            # path, so going through urlparse().path alone drops everything
+            # before it -- which reads as an empty filename, not as an error.
+            if "://" in value:
+                parsed = urlparse(value)
+                value = unquote((parsed.netloc or "") + (parsed.path or ""))
+            # chr(92) is a backslash; spelling it this way keeps the script
+            # free of escapes the app has to escape in turn.
+            return os.path.basename(value.replace(chr(92), "/").rstrip("/"))
+
+
         def to_absolute(name, media_dir):
-            base = os.path.basename(unquote(urlparse(name).path) if "://" in name else name)
-            return "file://" + quote(os.path.join(media_dir, base))
+            # as_uri() knows what a file URL looks like on this platform.
+            # Quoting a joined path by hand does not, and turns a drive letter
+            # into percent-escapes that nothing will open.
+            return pathlib.Path(os.path.join(media_dir, basename(name))).as_uri()
 
 
         def to_relative(name):
-            base = os.path.basename(unquote(urlparse(name).path) if "://" in name else name)
-            return "./Media/" + base
+            return "./Media/" + basename(name)
 
 
         def main():
@@ -185,8 +199,9 @@ enum ProjectPackager {
                     value = match.group(1)
                     if args.relative:
                         return 'src="%s"' % to_relative(value)
-                    base = os.path.basename(unquote(urlparse(value).path)
-                                            if "://" in value else value)
+                    base = basename(value)
+                    if not base:
+                        return match.group(0)
                     if not os.path.exists(os.path.join(media_dir, base)):
                         missing.append(base)
                     return 'src="%s"' % to_absolute(value, media_dir)
