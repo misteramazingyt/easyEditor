@@ -92,6 +92,14 @@ jobs:
           ./drtcheck check.drt | tee blobs.txt
           python3 "$GITHUB_WORKSPACE/Tools/DRTCheck/check_drt.py" blobs.txt check.drt
 
+      # Kept so the file can be opened in Resolve itself when the format is
+      # being worked on; the step above is what decides whether the build goes.
+      - name: Upload the checked timeline
+        uses: actions/upload-artifact@v4
+        with:
+          name: drt-check
+          path: build/drtcheck/check.drt
+
       - name: Generate Xcode project
         run: xcodegen generate
 
