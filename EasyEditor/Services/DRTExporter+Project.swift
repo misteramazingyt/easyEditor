@@ -24,6 +24,15 @@ extension DRTExporter {
     /// where an obviously fake one does not.
     static let mediaToken = "__EASYEDITOR_MEDIA__"
 
+    /// How many tracks the bundled template provides for.
+    ///
+    /// A timeline's audio mixer lives in the sequence's own blob, one strip
+    /// per track, and it is far too large to synthesise — so the template
+    /// carries twelve of each and the export stays inside that. Write a
+    /// thirteenth audio track and it arrives with no strip behind it: the
+    /// clips are there, and silent.
+    static let trackLimit = 12
+
     struct Package {
         let timeline: Timeline
         /// What could not cross over, for the README.
@@ -160,11 +169,25 @@ extension DRTExporter {
             notes.append("Clip volume and mutes ride in the FCPXML, not the .drt.")
         }
 
+        // Anything past the template's mixer would come in silent, so the
+        // overflow is folded onto the last track it does cover. Clips can then
+        // sit side by side that were on separate lanes, which is worth saying.
+        func fold(_ tracks: [[Clip]], _ what: String) -> [[Clip]] {
+            guard tracks.count > trackLimit else { return tracks }
+            var kept = Array(tracks.prefix(trackLimit))
+            let overflow = tracks.dropFirst(trackLimit).flatMap { $0 }
+            kept[trackLimit - 1].append(contentsOf: overflow)
+            kept[trackLimit - 1].sort { $0.start < $1.start }
+            notes.append("More than \(trackLimit) \(what) tracks — the extra clips "
+                         + "were moved onto the top one, so check that lane.")
+            return kept
+        }
+
         let render = project.aspect.renderSize
         return Package(
             timeline: Timeline(name: project.name, width: Int(render.width),
                                height: Int(render.height), rate: frameRate,
-                               video: video, audio: audio),
+                               video: fold(video, "video"), audio: fold(audio, "audio")),
             notes: notes)
     }
 

@@ -145,7 +145,7 @@ def check_archive(path):
     # Nothing may still carry the template's own identity, or Resolve matches
     # the timeline to one it already holds and the import does nothing.
     joined = "".join(contents.values())
-    for stale in ("69bcc5bb-bd88-4ebc-8d46-454fb8467aae",):
+    for stale in ("02fb1cc9-fdc6-4945-90d9-93d305963e1e",):
         if stale in joined:
             fail("the template's identity %s survived the remap" % stale)
     print("  ok the template's identities were replaced")
@@ -186,6 +186,15 @@ def check_archive(path):
         if struct.unpack(">I", raw[4:8])[0] != len(raw) - 8:
             fail("a Clip blob's length field disagrees with its size")
     print("  ok %d Clip blobs are raw and correctly sized" % len(clips))
+
+    video_tracks = contents[seq].count("<Type>0</Type>")
+    audio_tracks = contents[seq].count("<Type>1</Type>")
+    if video_tracks > 12 or audio_tracks > 12:
+        fail("%d video and %d audio tracks; the template's mixer covers 12 of each, "
+             "and tracks past that come in silent" % (video_tracks, audio_tracks))
+    else:
+        print("  ok %d video and %d audio tracks, within the mixer"
+              % (video_tracks, audio_tracks))
 
     if "__EASYEDITOR_MEDIA__" not in contents[seq]:
         fail("the media placeholder is missing, so relink.py has nothing to find")
