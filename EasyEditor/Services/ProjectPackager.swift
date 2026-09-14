@@ -85,6 +85,9 @@ enum ProjectPackager {
         try relinkScript(folderName: folderName)
             .write(to: staging.appendingPathComponent("relink.py"),
                    atomically: true, encoding: .utf8)
+        try resolveScript()
+            .write(to: staging.appendingPathComponent("set_matte_modes.py"),
+                   atomically: true, encoding: .utf8)
         try readme(project: project, folderName: folderName,
                    notes: notes, mattes: mattes)
             .write(to: staging.appendingPathComponent("README.txt"),
@@ -243,6 +246,101 @@ enum ProjectPackager {
         """
     }
 
+
+    /// Sets the two blend modes that turn a matte pair into a key.
+    ///
+    /// Resolve composites this natively on the Edit page: the matte set to
+    /// Lum, the take above it set to Foreground. No Fusion, no external
+    /// mattes, no colour page. FCPXML cannot carry a blend mode, so this walks
+    /// the imported timeline afterwards and sets them — the numbers are
+    /// Resolve's own enumeration, read back off clips set by hand.
+    private static func resolveScript() -> String {
+        """
+        #!/usr/bin/env python3
+        # Pair every keyed take with its matte, in an already-imported timeline.
+        #
+        #   Resolve > Workspace > Console  (switch to Py3), then:
+        #       exec(open(r"<this file>").read())
+        #
+        # or run it outside Resolve with RESOLVE_SCRIPT_API set the usual way.
+        #
+        # It touches nothing but the Composite Mode of clips it can pair, so
+        # running it twice is harmless.
+
+        import sys
+
+        # Resolve's own Composite Mode enumeration.
+        FOREGROUND = 27
+        LUM = 30
+        MATTE_SUFFIX = ".matte.mov"
+
+
+        def get_resolve():
+            try:
+                import DaVinciResolveScript as dvr
+                return dvr.scriptapp("Resolve")
+            except ImportError:
+                pass
+            try:
+                # Inside Resolve's own console the object is already there.
+                return resolve  # noqa: F821
+            except NameError:
+                return None
+
+
+        def main():
+            app = get_resolve()
+            if app is None:
+                sys.exit("Couldn't reach Resolve. Run this from its console, "
+                         "or set up the scripting API first.")
+            project = app.GetProjectManager().GetCurrentProject()
+            if project is None:
+                sys.exit("No project open.")
+            timeline = project.GetCurrentTimeline()
+            if timeline is None:
+                sys.exit("No timeline open.")
+
+            # Everything on every video track, with the track it sits on.
+            items = []
+            for track in range(1, int(timeline.GetTrackCount("video")) + 1):
+                for item in timeline.GetItemListInTrack("video", track) or []:
+                    items.append((track, item))
+
+            mattes = [(t, i) for t, i in items if i.GetName().endswith(MATTE_SUFFIX)]
+            if not mattes:
+                sys.exit("No .matte.mov clips on this timeline — nothing to pair.")
+
+            paired = 0
+            orphans = []
+            for track, matte in mattes:
+                base = matte.GetName()[: -len(MATTE_SUFFIX)]
+                take = None
+                for other_track, item in items:
+                    if other_track <= track:
+                        continue
+                    name = item.GetName()
+                    if name.startswith(base) and not name.endswith(MATTE_SUFFIX):
+                        # The one that actually overlaps it in time.
+                        if item.GetStart() < matte.GetEnd() and item.GetEnd() > matte.GetStart():
+                            take = item
+                            break
+                if take is None:
+                    orphans.append(matte.GetName())
+                    continue
+                matte.SetProperty("CompositeMode", LUM)
+                take.SetProperty("CompositeMode", FOREGROUND)
+                paired += 1
+
+            print("Paired %d matte%s." % (paired, "" if paired == 1 else "s"))
+            for name in orphans:
+                print("  ! no take above this matte: %s" % name)
+
+
+        main()
+
+        """
+    }
+
     private static func readme(project: VideoProject, folderName: String,
                                notes: [String], mattes: [String]) -> String {
         var text = """
@@ -274,26 +372,25 @@ enum ProjectPackager {
             Turning the transparency back on
               Your keyed takes were recorded as HEVC with alpha, which keeps
               them small and which only Apple's decoders read: the alpha sits
-              in a separate layer that Resolve on Windows, and ffmpeg, both
-              ignore. That layer is premultiplied, so where the background was
-              keyed out the colour is black -- ignore the alpha and the key
-              does not merely vanish, it fills in black.
+              in a layer Resolve on Windows and ffmpeg both ignore, and it is
+              premultiplied, so ignoring it fills the key in with black rather
+              than merely flattening it.
 
-              So each keyed take arrives as a compound clip named after the
-              recording, holding two things: the picture, and its matte on the
-              lane above -- white where you are, black where you are not.
+              So each keyed take arrives with a matte beside it -- an ordinary
+              black-and-white movie, white where you are -- on the track
+              directly below. Resolve composites that natively:
 
-              To switch it on, once per take:
-                1. Open the compound clip (double-click it in the Media Pool).
-                2. Select the picture, go to the Color page.
-                3. Add the matte as a Layer/Alpha input, and connect it to the
-                   node's Key input, then to Alpha Output.
-                4. Close the compound. Every use of it on the timeline is now
-                   transparent.
+                  the matte           Composite Mode: Lum
+                  the take above it   Composite Mode: Foreground
 
-              The alternative is ProRes 4444, which carries alpha everywhere
-              and runs about 40 MB a second -- this way the transfer stays
-              small and the step is yours to take only where you need it.
+              Two dropdowns per take, in the Inspector. To have them all set
+              at once, open Resolve's console (Workspace > Console, switch it
+              to Py3) after importing and run:
+
+                  exec(open(r"<this folder>/set_matte_modes.py").read())
+
+              It pairs each .matte.mov with the take above it and sets both
+              modes. It changes nothing else, and running it twice is safe.
 
             """
         }
