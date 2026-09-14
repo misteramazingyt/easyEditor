@@ -18,8 +18,7 @@ enum FCPXMLExporter {
     private static let timebase = 600
     /// Spelled out rather than escaped: this file builds strings inside
     /// strings, and one more backslash is one more thing to get wrong.
-    private static let newline = "
-"
+    private static let newline = String(UnicodeScalar(10))
 
     /// FCPXML time: a rational number of seconds.
     private static func time(_ seconds: Double) -> String {
