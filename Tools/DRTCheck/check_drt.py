@@ -208,13 +208,27 @@ def unwrap(blob):
     return raw[9:]
 
 
+def varint(raw, index):
+    """A protobuf varint, and where it ends. A group of three needs more than
+    127 bytes to name its members, so these are not single bytes."""
+    value = shift = 0
+    while index < len(raw):
+        byte = raw[index]
+        value |= (byte & 0x7F) << shift
+        index += 1
+        if not byte & 0x80:
+            return value, index
+        shift += 7
+    return value, index
+
+
 def nested(payload, depth):
     """Step into `depth` levels of protobuf field 1."""
     for _ in range(depth):
         if not payload or payload[0] != 0x0A:
             return None
-        length = payload[1]
-        payload = payload[2:2 + length]
+        length, start = varint(payload, 1)
+        payload = payload[start:start + length]
     return payload
 
 
