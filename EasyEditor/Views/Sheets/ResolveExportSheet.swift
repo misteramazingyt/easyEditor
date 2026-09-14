@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Hand the edit to the desktop: FCPXML plus the media, fetched over the
-/// local network from the phone itself.
+/// Hand the edit to the desktop: a Resolve timeline plus the media, fetched
+/// over the local network from the phone itself.
 struct ResolveExportSheet: View {
     @EnvironmentObject private var editor: EditorState
     @Environment(\.dismiss) private var dismiss
@@ -57,6 +57,17 @@ struct ResolveExportSheet: View {
                              + String(format: "%.1f MB", Double(package.byteCount) / 1_048_576))
                     }
 
+                    Section("Once it's on the computer") {
+                        Text("Unpack it somewhere you'll leave it, then run "
+                             + "python3 relink.py beside it — neither the phone nor "
+                             + "the file can know where you put it.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("Import the .drt, not the .fcpxml. It's Resolve's own "
+                             + "format, so your keyed takes arrive with the "
+                             + "transparency already switched on.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+
                     if !package.notes.isEmpty {
                         Section("What doesn't cross over") {
                             ForEach(package.notes, id: \.self) { note in
@@ -70,8 +81,8 @@ struct ResolveExportSheet: View {
                               systemImage: "shippingbox")
                             .font(.subheadline).foregroundStyle(.secondary)
                     } footer: {
-                        Text("The timeline as FCPXML 1.8, every file it uses, and a "
-                             + "relink script — in one archive.")
+                        Text("The timeline in Resolve's own format, every file it "
+                             + "uses, and a relink script — in one archive.")
                     }
                 }
             }
