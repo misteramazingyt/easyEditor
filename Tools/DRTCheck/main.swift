@@ -23,13 +23,16 @@ print("resolution \(DRTBlobs.resolution(width: 1080, height: 1920).hexadecimal)"
 print("framerate \(DRTBlobs.frameRate(30).hexadecimal)")
 print("timemap \(DRTBlobs.timemap(frames: 120, rate: 30))")
 print("extents \(DRTBlobs.preConformExtents)")
-print("keyvalue \(DRTBlobs.keyValue([
+// One of every value type, so a wrong width shows up as a blob that does not
+// consume exactly. Interpolation cannot span lines, so build it first.
+let sample = DRTBlobs.keyValue([
     .text("DbType", "BtVideoTime"),
     .int("NumFrames", .int, 120),
     .int("StartTime", .long, 0),
     .int("SampleRate", .uint, 44_100),
     .data("FrameRate", DRTBlobs.frameRate(30)),
-]))")
+])
+print("keyvalue \(sample)")
 
 // Then a whole timeline, in the shape the app exports: a matte under its take
 // making a key, an ordinary clip above, and two audio tracks.
