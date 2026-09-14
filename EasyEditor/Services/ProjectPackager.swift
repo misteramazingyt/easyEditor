@@ -267,12 +267,16 @@ enum ProjectPackager {
         # It touches nothing but the Composite Mode of clips it can pair, so
         # running it twice is harmless.
 
+        import glob
+        import os
         import sys
 
-        # Resolve's own Composite Mode enumeration.
+        # Resolve's own Composite Mode enumeration, read back off clips set by
+        # hand in the Inspector -- there is no published list of these.
         FOREGROUND = 27
         LUM = 30
         MATTE_SUFFIX = ".matte.mov"
+        HERE = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else os.getcwd()
 
 
         def get_resolve():
@@ -298,7 +302,19 @@ enum ProjectPackager {
                 sys.exit("No project open.")
             timeline = project.GetCurrentTimeline()
             if timeline is None:
-                sys.exit("No timeline open.")
+                # Nothing open: import the edit sitting beside this script.
+                xml = sorted(glob.glob(os.path.join(HERE, "*.fcpxml")))
+                if not xml:
+                    sys.exit("No timeline open, and no .fcpxml beside this script.")
+                pool = project.GetMediaPool()
+                if not pool.ImportTimelineFromFile(xml[0]):
+                    sys.exit("Couldn't import %s. Import it by hand "
+                             "(File > Import > Timeline) and run this again."
+                             % os.path.basename(xml[0]))
+                timeline = project.GetCurrentTimeline()
+                if timeline is None:
+                    sys.exit("The import didn't leave a timeline open.")
+                print("Imported %s." % os.path.basename(xml[0]))
 
             # Everything on every video track, with the track it sits on.
             items = []
@@ -385,12 +401,20 @@ enum ProjectPackager {
 
               Two dropdowns per take, in the Inspector. To have them all set
               at once, open Resolve's console (Workspace > Console, switch it
-              to Py3) after importing and run:
+              to Py3) and run:
 
                   exec(open(r"<this folder>/set_matte_modes.py").read())
 
-              It pairs each .matte.mov with the take above it and sets both
-              modes. It changes nothing else, and running it twice is safe.
+              With no timeline open it imports the .fcpxml beside it first, so
+              that one line does the whole job. It pairs each .matte.mov with
+              the take above it, sets both modes, and touches nothing else --
+              running it twice is safe.
+
+              Why a script and not the file itself: no interchange format
+              carries a composite mode into Resolve. Resolve's own FCPXML
+              export doesn't write one, and its native .drt keeps clip settings
+              in undocumented binary blobs. The scripting API is the only way
+              in, so that is what this uses.
 
             """
         }
