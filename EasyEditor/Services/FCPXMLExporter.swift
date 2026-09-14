@@ -49,8 +49,11 @@ enum FCPXMLExporter {
             guard FileManager.default.fileExists(atPath: url.path) else { continue }
             if clip.kind == .image {
                 let size = imageSize(at: url) ?? CGSize(width: 1080, height: 1920)
-                result[clip.id] = Media(clip: clip, fileName: fileName, size: size,
-                                        duration: max(1, clip.effectiveDuration),
+                // A still can be held for as long as you like, so the asset
+                // has to be long enough for any clip cut from it — its own
+                // clip length is not a ceiling the importer should inherit.
+                result[clip.id] = Media(clip: clip, fileName: exportName(for: fileName),
+                                        size: size, duration: 3600,
                                         hasVideo: true, hasAudio: false)
                 continue
             }
@@ -64,11 +67,27 @@ enum FCPXMLExporter {
                 size = turned ? CGSize(width: natural.height, height: natural.width) : natural
             }
             let duration = (try? await asset.load(.duration).seconds) ?? clip.assetDuration
-            result[clip.id] = Media(clip: clip, fileName: fileName, size: size,
-                                    duration: max(0.1, duration),
+            result[clip.id] = Media(clip: clip, fileName: exportName(for: fileName),
+                                    size: size, duration: max(0.1, duration),
                                     hasVideo: video != nil, hasAudio: audio != nil)
         }
         return result
+    }
+
+    /// What the file is called inside the archive.
+    ///
+    /// Resolve reads a still whose name ends in digits as one frame of an
+    /// image sequence and goes looking for its siblings — a single jpg came in
+    /// as "name[6-125].jpg", 120 frames of nothing. A trailing letter is
+    /// enough to stop it guessing.
+    static func exportName(for fileName: String) -> String {
+        let url = URL(fileURLWithPath: fileName)
+        let ext = url.pathExtension.lowercased()
+        let stills: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "gif"]
+        guard stills.contains(ext) else { return fileName }
+        let base = url.deletingPathExtension().lastPathComponent
+        guard let last = base.last, last.isNumber else { return fileName }
+        return "\(base)-still.\(url.pathExtension)"
     }
 
     private static func imageSize(at url: URL) -> CGSize? {
@@ -151,39 +170,80 @@ enum FCPXMLExporter {
 
         """
 
-        // The storyline, in order, with connected clips hung off whichever
-        // storyline clip is under them — which is how FCPXML expresses a lane.
-        let storyline = project.primaryClips
+        // FCPXML hangs connected clips off a spine element, and a connected
+        // clip that lands outside every spine element has nowhere to go — it
+        // is silently dropped. A storyline is rarely long enough to cover a
+        // project on its own (ours is often one black placeholder holding a
+        // few seconds open), so the spine is filled out with gaps until it
+        // spans the whole timeline. Then everything has a host.
+        struct Host {
+            let clip: TimelineClip?     // nil = a gap
+            let start: Double           // on the timeline
+            let duration: Double
+            var end: Double { start + duration }
+            /// The host's own in-point, which is the base its children's
+            /// offsets are measured from.
+            var innerStart: Double { clip.map { $0.isPlaceholder == true ? 0 : $0.trimStart } ?? 0 }
+        }
+
         let starts = project.primaryStartTimes
+        var hosts: [Host] = []
+        var cursor = 0.0
+        for clip in project.primaryClips {
+            let clipStart = starts[clip.id] ?? cursor
+            if clipStart - cursor > 0.001 {
+                hosts.append(Host(clip: nil, start: cursor, duration: clipStart - cursor))
+            }
+            // A placeholder is scaffolding holding time open, not footage.
+            // Exported as a gap it does the same job without laying a black
+            // rectangle under everything.
+            if clip.isPlaceholder == true || media[clip.id] == nil {
+                hosts.append(Host(clip: nil, start: clipStart, duration: clip.effectiveDuration))
+            } else {
+                hosts.append(Host(clip: clip, start: clipStart, duration: clip.effectiveDuration))
+            }
+            cursor = clipStart + clip.effectiveDuration
+        }
+        if duration - cursor > 0.001 {
+            hosts.append(Host(clip: nil, start: cursor, duration: duration - cursor))
+        }
+        if hosts.isEmpty {
+            hosts = [Host(clip: nil, start: 0, duration: duration)]
+        }
+
         let connected = project.clips
             .filter { $0.lane != .primary && media[$0.id] != nil }
-            .sorted { $0.offset < $1.offset }
-        var claimed = Set<UUID>()
+            .sorted { project.start(of: $0) < project.start(of: $1) }
 
-        if storyline.isEmpty {
-            // Nothing on the storyline: hang everything off a gap, which is
-            // FCPXML's way of saying "empty time you can attach things to".
-            out += "        <gap name=\"Gap\" offset=\"0s\" duration=\"\(time(duration))\" start=\"0s\">\n"
-            for clip in connected {
-                out += element(for: clip, media: media, assetIDs: assetIDs,
-                               offset: clip.offset, parentStart: 0, indent: 10)
+        for (index, host) in hosts.enumerated() {
+            let isLast = index == hosts.count - 1
+            var children = ""
+            for other in connected {
+                let otherStart = project.start(of: other)
+                // Belongs to the host it starts inside; anything running past
+                // the end of the timeline lands on the last one.
+                let inside = otherStart >= host.start - 0.001
+                    && (otherStart < host.end - 0.001 || (isLast && otherStart >= host.start))
+                guard inside else { continue }
+                children += element(for: other, media: media, assetIDs: assetIDs,
+                                    // A child's offset is in its host's own
+                                    // time base, which begins at the host's
+                                    // in-point — not at zero.
+                                    offset: host.innerStart + (otherStart - host.start),
+                                    indent: 10)
             }
-            out += "        </gap>\n"
-        } else {
-            for clip in storyline {
-                let start = starts[clip.id] ?? 0
-                let end = start + clip.effectiveDuration
-                var children = ""
-                for other in connected where !claimed.contains(other.id) {
-                    let otherStart = project.start(of: other)
-                    guard otherStart >= start - 0.001, otherStart < end - 0.001 else { continue }
-                    claimed.insert(other.id)
-                    children += element(for: other, media: media, assetIDs: assetIDs,
-                                        offset: otherStart - start, parentStart: clip.trimStart,
-                                        indent: 10)
-                }
+            if let clip = host.clip {
                 out += element(for: clip, media: media, assetIDs: assetIDs,
-                               offset: start, parentStart: 0, indent: 8, children: children)
+                               offset: host.start, indent: 8, children: children)
+            } else {
+                let attributes = "name=\"Gap\" offset=\"\(time(host.start))\" "
+                    + "start=\"0s\" duration=\"\(time(host.duration))\""
+                out += children.isEmpty
+                    ? "        <gap \(attributes)/>
+"
+                    : "        <gap \(attributes)>
+\(children)        </gap>
+"
             }
         }
 
@@ -203,8 +263,7 @@ enum FCPXMLExporter {
     /// carry an offset from the clip they hang on, plus the lane they sit in.
     private static func element(for clip: TimelineClip, media: [UUID: Media],
                                 assetIDs: [UUID: String], offset: Double,
-                                parentStart: Double, indent: Int,
-                                children: String = "") -> String {
+                                indent: Int, children: String = "") -> String {
         guard let entry = media[clip.id], let assetID = assetIDs[clip.id] else { return "" }
         let pad = String(repeating: " ", count: indent)
         let tag = entry.hasVideo ? "asset-clip" : "audio"
@@ -214,9 +273,6 @@ enum FCPXMLExporter {
         attributes += " duration=\"\(time(clip.effectiveDuration))\""
         if clip.lane != .primary {
             attributes += " lane=\"\(clip.stackIndex)\""
-        }
-        if clip.isMuted {
-            attributes += " audioRole=\"music\""
         }
         var body = children
         // Speed is a time map in FCPXML: the clip's own time against the

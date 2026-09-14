@@ -33,7 +33,8 @@ enum ProjectPackager {
             let source = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
             guard FileManager.default.fileExists(atPath: source.path) else { continue }
             try? FileManager.default.copyItem(
-                at: source, to: mediaOut.appendingPathComponent(fileName))
+                at: source,
+                to: mediaOut.appendingPathComponent(FCPXMLExporter.exportName(for: fileName)))
             copied.insert(fileName)
         }
 
