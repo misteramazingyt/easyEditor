@@ -428,6 +428,26 @@ struct AestheticSettings: Codable, Equatable {
     var excludeCameraTakes: Bool = true
 
     var isActive: Bool { mode != .none && strength > 0.01 }
+
+    /// Decoded by hand so a project saved before a field existed still opens.
+    ///
+    /// Swift's synthesised decoder reads a non-optional property with
+    /// `decode`, not `decodeIfPresent` — a default value on the property is
+    /// not a fallback, and a missing key throws. `halo` arrived after builds
+    /// were already in use, so any project that had an aesthetic set would
+    /// have refused to decode, and one refusal takes the whole library with
+    /// it. Everything here tolerates absence.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try c.decodeIfPresent(AestheticMode.self, forKey: .mode) ?? .none
+        presetID = try c.decodeIfPresent(String.self, forKey: .presetID)
+        strength = try c.decodeIfPresent(Double.self, forKey: .strength) ?? 0.85
+        caustics = try c.decodeIfPresent(Double.self, forKey: .caustics) ?? 0.5
+        halo = try c.decodeIfPresent(Double.self, forKey: .halo) ?? 0.8
+        excludeCameraTakes = try c.decodeIfPresent(Bool.self, forKey: .excludeCameraTakes) ?? true
+    }
+
+    init() {}
 }
 
 // MARK: - Blend modes

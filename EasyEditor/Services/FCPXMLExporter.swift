@@ -1,0 +1,243 @@
+import Foundation
+import AVFoundation
+
+/// Write a project out as FCPXML, which DaVinci Resolve reads.
+///
+/// Version 1.8 on purpose: it is the dialect Resolve is happiest with, and
+/// nothing here needs anything newer. Times are rational numbers over a 600
+/// timebase — FCPXML insists on exact arithmetic, and 600 divides 24, 25 and
+/// 30 cleanly, so nothing lands between frames.
+///
+/// What crosses over: the storyline in order, every connected video, image and
+/// audio clip on its own lane, with trims, speed and per-clip volume. What
+/// does not: titles, filters, LUTs, masks, the aesthetic treatment and the
+/// animation — Resolve has its own versions of all of those and no way to
+/// receive ours, so they are listed in the README rather than silently lost.
+enum FCPXMLExporter {
+
+    private static let timebase = 600
+
+    /// FCPXML time: a rational number of seconds.
+    private static func time(_ seconds: Double) -> String {
+        let value = Int((seconds * Double(timebase)).rounded())
+        return value == 0 ? "0s" : "\(value)/\(timebase)s"
+    }
+
+    private static func escape(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    struct Media {
+        let clip: TimelineClip
+        let fileName: String
+        let size: CGSize
+        let duration: Double
+        let hasVideo: Bool
+        let hasAudio: Bool
+    }
+
+    /// Everything the XML needs to know about the files, read once.
+    static func gather(project: VideoProject) async -> [UUID: Media] {
+        var result: [UUID: Media] = [:]
+        for clip in project.clips {
+            guard let fileName = clip.fileName else { continue }
+            let url = FilePaths.mediaURL(projectID: project.id, fileName: fileName)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            if clip.kind == .image {
+                let size = imageSize(at: url) ?? CGSize(width: 1080, height: 1920)
+                result[clip.id] = Media(clip: clip, fileName: fileName, size: size,
+                                        duration: max(1, clip.effectiveDuration),
+                                        hasVideo: true, hasAudio: false)
+                continue
+            }
+            let asset = AVURLAsset(url: url)
+            let video = try? await asset.loadTracks(withMediaType: .video).first
+            let audio = try? await asset.loadTracks(withMediaType: .audio).first
+            var size = CGSize(width: 1920, height: 1080)
+            if let video, let natural = try? await video.load(.naturalSize),
+               let transform = try? await video.load(.preferredTransform) {
+                let turned = abs(transform.b) == 1 && abs(transform.c) == 1
+                size = turned ? CGSize(width: natural.height, height: natural.width) : natural
+            }
+            let duration = (try? await asset.load(.duration).seconds) ?? clip.assetDuration
+            result[clip.id] = Media(clip: clip, fileName: fileName, size: size,
+                                    duration: max(0.1, duration),
+                                    hasVideo: video != nil, hasAudio: audio != nil)
+        }
+        return result
+    }
+
+    private static func imageSize(at url: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? Double,
+              let height = props[kCGImagePropertyPixelHeight] as? Double else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    /// Build the document. `mediaFolder` is what the `src` paths are relative
+    /// to once the archive has been unpacked.
+    static func xml(for project: VideoProject, media: [UUID: Media],
+                    mediaFolder: String = "Media") -> String {
+        let render = project.aspect.renderSize
+        var out = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE fcpxml>
+        <fcpxml version="1.8">
+          <resources>
+            <format id="r0" name="EasyEditorFormat" frameDuration="20/600s" \
+        width="\(Int(render.width))" height="\(Int(render.height))" \
+        colorSpace="1-1-1 (Rec. 709)"/>
+
+        """
+
+        // One asset per file, and one format per distinct frame size: Resolve
+        // uses the asset's own format to decide how to fit it into the
+        // timeline, so a clip that is not the project's shape keeps its shape.
+        var assetIDs: [UUID: String] = [:]
+        var formatIDs: [String: String] = [:]
+        var formats = ""
+        var assets = ""
+        var next = 1
+        for clip in project.clips {
+            guard let entry = media[clip.id] else { continue }
+            let key = "\(Int(entry.size.width))x\(Int(entry.size.height))"
+            let formatID: String
+            if let existing = formatIDs[key] {
+                formatID = existing
+            } else if key == "\(Int(render.width))x\(Int(render.height))" {
+                formatID = "r0"
+                formatIDs[key] = formatID
+            } else {
+                formatID = "f\(next)"
+                next += 1
+                formatIDs[key] = formatID
+                formats += """
+                    <format id="\(formatID)" name="EasyEditor\(key)" frameDuration="20/600s" \
+                width="\(Int(entry.size.width))" height="\(Int(entry.size.height))" \
+                colorSpace="1-1-1 (Rec. 709)"/>
+
+                """
+            }
+            let assetID = "a\(next)"
+            next += 1
+            assetIDs[clip.id] = assetID
+            let src = "./\(mediaFolder)/\(entry.fileName)"
+            assets += """
+                <asset id="\(assetID)" name="\(escape(entry.fileName))" \
+            src="\(escape(src))" start="0s" duration="\(time(entry.duration))" \
+            hasVideo="\(entry.hasVideo ? 1 : 0)" hasAudio="\(entry.hasAudio ? 1 : 0)" \
+            format="\(formatID)"\(entry.hasAudio ? " audioSources=\"1\" audioChannels=\"2\"" : "")/>
+
+            """
+        }
+        out += formats + assets
+        out += "  </resources>\n"
+
+        // MARK: The timeline
+
+        let duration = max(1, project.duration)
+        out += """
+          <library>
+            <event name="EasyEditor">
+              <project name="\(escape(project.name))">
+                <sequence format="r0" duration="\(time(duration))" tcStart="0s" \
+        tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+                  <spine>
+
+        """
+
+        // The storyline, in order, with connected clips hung off whichever
+        // storyline clip is under them — which is how FCPXML expresses a lane.
+        let storyline = project.primaryClips
+        let starts = project.primaryStartTimes
+        let connected = project.clips
+            .filter { $0.lane != .primary && media[$0.id] != nil }
+            .sorted { $0.offset < $1.offset }
+        var claimed = Set<UUID>()
+
+        if storyline.isEmpty {
+            // Nothing on the storyline: hang everything off a gap, which is
+            // FCPXML's way of saying "empty time you can attach things to".
+            out += "        <gap name=\"Gap\" offset=\"0s\" duration=\"\(time(duration))\" start=\"0s\">\n"
+            for clip in connected {
+                out += element(for: clip, media: media, assetIDs: assetIDs,
+                               offset: clip.offset, parentStart: 0, indent: 10)
+            }
+            out += "        </gap>\n"
+        } else {
+            for clip in storyline {
+                let start = starts[clip.id] ?? 0
+                let end = start + clip.effectiveDuration
+                var children = ""
+                for other in connected where !claimed.contains(other.id) {
+                    let otherStart = project.start(of: other)
+                    guard otherStart >= start - 0.001, otherStart < end - 0.001 else { continue }
+                    claimed.insert(other.id)
+                    children += element(for: other, media: media, assetIDs: assetIDs,
+                                        offset: otherStart - start, parentStart: clip.trimStart,
+                                        indent: 10)
+                }
+                out += element(for: clip, media: media, assetIDs: assetIDs,
+                               offset: start, parentStart: 0, indent: 8, children: children)
+            }
+        }
+
+        out += """
+                  </spine>
+                </sequence>
+              </project>
+            </event>
+          </library>
+        </fcpxml>
+
+        """
+        return out
+    }
+
+    /// One clip. Storyline clips carry their timeline offset; connected ones
+    /// carry an offset from the clip they hang on, plus the lane they sit in.
+    private static func element(for clip: TimelineClip, media: [UUID: Media],
+                                assetIDs: [UUID: String], offset: Double,
+                                parentStart: Double, indent: Int,
+                                children: String = "") -> String {
+        guard let entry = media[clip.id], let assetID = assetIDs[clip.id] else { return "" }
+        let pad = String(repeating: " ", count: indent)
+        let tag = entry.hasVideo ? "asset-clip" : "audio"
+        var attributes = "ref=\"\(assetID)\" offset=\"\(time(offset))\""
+        attributes += " name=\"\(escape(entry.fileName))\""
+        attributes += " start=\"\(time(clip.trimStart))\""
+        attributes += " duration=\"\(time(clip.effectiveDuration))\""
+        if clip.lane != .primary {
+            attributes += " lane=\"\(clip.stackIndex)\""
+        }
+        if clip.isMuted {
+            attributes += " audioRole=\"music\""
+        }
+        var body = children
+        // Speed is a time map in FCPXML: the clip's own time against the
+        // timeline's, as two points.
+        if clip.speed != 1, clip.kind == .video {
+            let source = clip.trimEnd - clip.trimStart
+            body += """
+            \(pad)  <timeMap>
+            \(pad)    <timept time="0s" value="0s" interp="linear"/>
+            \(pad)    <timept time="\(time(clip.effectiveDuration))" value="\(time(source))" interp="linear"/>
+            \(pad)  </timeMap>
+
+            """
+        }
+        if clip.volume != 1 || clip.isMuted {
+            let level = clip.isMuted ? 0 : clip.volume
+            body += "\(pad)  <adjust-volume amount=\"\(String(format: "%.2f", level))\"/>\n"
+        }
+        if body.isEmpty {
+            return "\(pad)<\(tag) \(attributes)/>\n"
+        }
+        return "\(pad)<\(tag) \(attributes)>\n\(body)\(pad)</\(tag)>\n"
+    }
+}

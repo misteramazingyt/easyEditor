@@ -13,6 +13,7 @@ struct ExportSheet: View {
     @State private var phase: Phase = .idle
     @State private var progress: Double = 0
     @State private var exportService = ExportService()
+    @State private var showResolve = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -54,6 +55,16 @@ struct ExportSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .padding(.horizontal, 24)
+
+                Button {
+                    showResolve = true
+                } label: {
+                    Label("Send to DaVinci Resolve", systemImage: "desktopcomputer")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .padding(.horizontal, 24)
             case .building, .exporting, .saving:
                 VStack(spacing: 8) {
                     ProgressView(value: phase == .exporting ? progress : nil)
@@ -83,7 +94,10 @@ struct ExportSheet: View {
             Spacer(minLength: 0)
         }
         .foregroundStyle(.white)
-        .presentationDetents([.height(320)])
+        .presentationDetents([.height(380)])
+        .sheet(isPresented: $showResolve) {
+            ResolveExportSheet().environmentObject(editor)
+        }
         .interactiveDismissDisabled(phase == .building || phase == .exporting || phase == .saving)
     }
 

@@ -34,6 +34,13 @@ targets:
       path: EasyEditor/Info.plist
       properties:
         UILaunchScreen: {}
+        # The project folder shows up in Files, so a library can be copied off
+        # the phone without the app's help.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSLocalNetworkUsageDescription: >-
+          EasyEditor serves your export to your computer over the local network,
+          so you can fetch the Resolve package without a cable.
         UIAppFonts: [TikTokSans.ttf]
         NSCameraUsageDescription: "EasyEditor uses the camera to record you over your timeline with the background removed."
         NSMicrophoneUsageDescription: "EasyEditor needs microphone access to record voiceovers and camera takes."
