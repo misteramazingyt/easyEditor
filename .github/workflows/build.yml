@@ -124,16 +124,22 @@ jobs:
             ls -R build/Build/Products || true
             exit 1
           fi
-          rm -rf Payload EasyEditor-unsigned.ipa
+          # Name the build after the commit it came from, so which one is on
+          # the phone is never a guess.
+          BUILD="EasyEditor-$(date +%m%d-%H%M)-$(git rev-parse --short HEAD).ipa"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+          rm -rf Payload EasyEditor-*.ipa
           mkdir -p Payload
           cp -R "$APP" Payload/
-          zip -qry EasyEditor-unsigned.ipa Payload
-          echo "Built:" && ls -lh EasyEditor-unsigned.ipa
+          # Stamp it inside too, so the app itself can say which build it is.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git rev-parse --short HEAD)"             "Payload/EasyEditor.app/Info.plist" || true
+          zip -qry "$BUILD" Payload
+          echo "Built:" && ls -lh "$BUILD"
 
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EasyEditor-unsigned-ipa
-          path: EasyEditor-unsigned.ipa
+          name: EasyEditor-${{ github.sha }}
+          path: EasyEditor-*.ipa
           if-no-files-found: error
           retention-days: 30

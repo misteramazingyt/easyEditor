@@ -54,7 +54,8 @@ struct ResolveExportSheet: View {
                         }
                     } footer: {
                         Text("\(package.fileName) · "
-                             + String(format: "%.1f MB", Double(package.byteCount) / 1_048_576))
+                             + String(format: "%.1f MB", Double(package.byteCount) / 1_048_576)
+                             + " · build \(buildID)")
                     }
 
                     Section("Once it's on the computer") {
@@ -105,6 +106,12 @@ struct ResolveExportSheet: View {
         .preferredColorScheme(.dark)
         .task { await build() }
         .onDisappear { server.stop() }
+    }
+
+    /// Which build this is — the commit it came from, stamped in at package
+    /// time. Shown so "am I running the new one?" is answerable on the phone.
+    private var buildID: String {
+        (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
     }
 
     private func build() async {

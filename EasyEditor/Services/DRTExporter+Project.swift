@@ -69,7 +69,15 @@ extension DRTExporter {
             }
         }
 
+        /// A position on the timeline, or into the media. Zero is a real
+        /// answer here: a clip at the very start belongs at frame 0, and an
+        /// untrimmed clip begins at its own frame 0.
         func frames(_ seconds: Double) -> Int {
+            max(0, Int((seconds * frameRate).rounded()))
+        }
+
+        /// A length, which cannot be nothing.
+        func length(_ seconds: Double) -> Int {
             max(1, Int((seconds * frameRate).rounded()))
         }
 
@@ -91,7 +99,7 @@ extension DRTExporter {
                 guard let entry = media[clip.id],
                       let source = sources[entry.fileName] else { continue }
                 let start = frames(project.start(of: clip))
-                let duration = frames(clip.effectiveDuration)
+                let duration = length(clip.effectiveDuration)
                 let keyed = entry.matteName.flatMap { sources[$0] }
                 // A take, the matte that keys it and its own audio move
                 // together; anything unkeyed with no sound needs no group.
@@ -133,7 +141,7 @@ extension DRTExporter {
                           var source = sources[entry.fileName] else { return nil }
                     source.isVideo = false
                     return Clip(source: source, start: frames(project.start(of: clip)),
-                                duration: frames(clip.effectiveDuration),
+                                duration: length(clip.effectiveDuration),
                                 mediaStart: frames(clip.trimStart))
                 }
             if !clips.isEmpty { audio.append(clips) }
@@ -150,7 +158,7 @@ extension DRTExporter {
                     // and it belongs to the same group as the picture.
                     source.isVideo = false
                     return Clip(source: source, start: frames(project.start(of: clip)),
-                                duration: frames(clip.effectiveDuration),
+                                duration: length(clip.effectiveDuration),
                                 mediaStart: frames(clip.trimStart),
                                 group: clip.id)
                 }
