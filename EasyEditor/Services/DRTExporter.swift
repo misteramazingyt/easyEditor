@@ -30,6 +30,11 @@ enum DRTExporter {
         /// rewritten by `relink.py`.
         var directory: String
         var isVideo = true
+        /// A still is not a one-frame video: Resolve names no codec for it,
+        /// writes one frame, and gives it a time map that lets the frame be
+        /// held for any length. Claiming otherwise sends Resolve looking for
+        /// frames that are not there, and the clip comes in offline.
+        var isStill = false
         var width = 1080
         var height = 1920
         /// Length of the source media in frames, at `rate`.
@@ -37,6 +42,8 @@ enum DRTExporter {
         var rate: Double = 30
         /// The video codec's four-character code, as Resolve names it.
         var codec = "avc1"
+        /// The file's size on disk, which is what a still's frame size is.
+        var byteSize = 0
         var audio: Audio?
 
         struct Audio: Equatable {
@@ -58,6 +65,10 @@ enum DRTExporter {
         var mediaStart = 0
         /// Resolve's Composite Mode; 0 leaves the clip alone.
         var composite = DRTBlobs.Composite.normal
+        /// Clips sharing a group move together on the timeline, the way
+        /// Resolve links a clip's own picture and sound. A take, the matte
+        /// that keys it, and its audio are one group.
+        var group: UUID?
     }
 
     struct Timeline {
@@ -117,11 +128,32 @@ enum DRTExporter {
 
         // MARK: Tracks
 
+        // Every item needs its identity before any link can name it, so they
+        // are handed out in one pass and the groups resolved in the next.
+        var identities: [[String]] = []
+        var members: [UUID: [String]] = [:]
+        for track in timeline.video + timeline.audio {
+            var row: [String] = []
+            for clip in track {
+                let id = newID()
+                row.append(id)
+                if let group = clip.group { members[group, default: []].append(id) }
+            }
+            identities.append(row)
+        }
+        /// The others in this clip's group — what its FieldsBlob names.
+        func partners(of clip: Clip, _ id: String) -> [String] {
+            guard let group = clip.group else { return [] }
+            return (members[group] ?? []).filter { $0 != id }
+        }
+
         var videoVec = "<VideoTrackVec>\n"
         for (index, clips) in timeline.video.enumerated() {
             var items = ""
-            for clip in clips {
-                items += "\n" + videoItem(clip, ref: refs[clip.source.url] ?? "")
+            for (position, clip) in clips.enumerated() {
+                let id = identities[index][position]
+                items += "\n" + videoItem(clip, id: id, ref: refs[clip.source.url] ?? "",
+                                          partners: partners(of: clip, id))
             }
             videoVec += track(fields: Fixed.trackFields, type: 0,
                               // V1 carries a subtype Resolve reads as the base
@@ -134,11 +166,14 @@ enum DRTExporter {
         var audioVec = "<AudioTrackVec/>"
         if !timeline.audio.isEmpty {
             audioVec = "<AudioTrackVec>\n"
-            for clips in timeline.audio {
+            for (index, clips) in timeline.audio.enumerated() {
                 var items = ""
-                for clip in clips {
-                    items += "\n" + audioItem(clip, ref: refs[clip.source.url] ?? "",
-                                              rate: timeline.rate)
+                for (position, clip) in clips.enumerated() {
+                    let id = identities[timeline.video.count + index][position]
+                    items += "\n" + audioItem(clip, id: id,
+                                              ref: refs[clip.source.url] ?? "",
+                                              rate: timeline.rate,
+                                              partners: partners(of: clip, id))
                 }
                 audioVec += track(fields: Fixed.audioTrackFields, type: 1, subType: 0,
                                   sequence: sequenceID, items: items)
@@ -243,7 +278,7 @@ enum DRTExporter {
                <Clip>\(clipBlob(source, hasAudio: source.audio != nil))</Clip>
                <Time>\(timeBlob(source))</Time>
                <Geometry>\(geometryBlob(source))</Geometry>
-               <Radiometry>\(Fixed.radiometry)</Radiometry>
+               <Radiometry>\(source.isStill ? Fixed.stillRadiometry : Fixed.radiometry)</Radiometry>
                <Proxy>\(proxyBlob())</Proxy>
                <VideoMetadata>\(metadataBlob())</VideoMetadata>
                <MediaMetadata/>
@@ -279,12 +314,13 @@ enum DRTExporter {
 
     // MARK: - Timeline items
 
-    private static func videoItem(_ clip: Clip, ref: String) -> String {
+    private static func videoItem(_ clip: Clip, id: String, ref: String,
+                                  partners: [String]) -> String {
         let source = clip.source
         return """
               <Element>
-               <Sm2TiVideoClip DbId="\(newID())">
-                <FieldsBlob>\(Fixed.itemFields)</FieldsBlob>
+               <Sm2TiVideoClip DbId="\(id)">
+                <FieldsBlob>\(linkedItemFields(partners))</FieldsBlob>
                 <PrettyType/>
                 <Name>\(escape(source.name))</Name>
                 <Start>\(clip.start)</Start>
@@ -307,7 +343,7 @@ enum DRTExporter {
                 <MediaFilePath>\(escape(exportPath(source)))</MediaFilePath>
                 <MediaReelNumber/>
                 <MediaFrameRate>\(DRTBlobs.mediaFrameRate(source.rate))</MediaFrameRate>
-                <MediaTimemapBA>\(DRTBlobs.timemap(frames: source.frames, rate: source.rate))</MediaTimemapBA>
+                <MediaTimemapBA>\(timemap(source))</MediaTimemapBA>
                 <LastChangedTime>0</LastChangedTime>
                 <LastRenderedTime>0</LastRenderedTime>
                 <IsMarkedForCaching>false</IsMarkedForCaching>
@@ -335,12 +371,13 @@ enum DRTExporter {
         """
     }
 
-    private static func audioItem(_ clip: Clip, ref: String, rate: Double) -> String {
+    private static func audioItem(_ clip: Clip, id: String, ref: String,
+                                  rate: Double, partners: [String]) -> String {
         let source = clip.source
         return """
               <Element>
-               <Sm2TiAudioClip DbId="\(newID())">
-                <FieldsBlob>\(Fixed.audioItemFields)</FieldsBlob>
+               <Sm2TiAudioClip DbId="\(id)">
+                <FieldsBlob>\(linkedItemFields(partners, audio: true))</FieldsBlob>
                 <PrettyType/>
                 <Name>\(escape(source.name))</Name>
                 <Start>\(clip.start)</Start>
@@ -408,14 +445,15 @@ enum DRTExporter {
         var payload = DRTBlobs.string(1, directory)
         payload.append(DRTBlobs.string(2, name))
         payload.append(DRTBlobs.string(3, stamp(source.url)))
-        payload.append(DRTBlobs.string(5, source.codec))
+        // Resolve names a codec for a clip and none for a still.
+        if !source.isStill { payload.append(DRTBlobs.string(5, source.codec)) }
         payload.append(DRTBlobs.string(6, name))
         payload.append(DRTBlobs.string(7, newID()))
-        if hasAudio { payload.append(DRTBlobs.number(14, 2)) }
         payload.append(DRTBlobs.number(13, UInt64(modified(source.url) * 1_000_000)))
+        if hasAudio || source.isStill { payload.append(DRTBlobs.number(14, 2)) }
         payload.append(DRTBlobs.number(15, 4))
         payload.append(DRTBlobs.number(16, 100))
-        payload.append(DRTBlobs.number(18, 16_384))
+        payload.append(DRTBlobs.number(18, source.isStill ? 8_214 : 16_384))
         return DRTBlobs.wrap(payload)
     }
 
@@ -454,21 +492,68 @@ enum DRTExporter {
         DRTBlobs.keyValue([
             .text("UniqueId", newID()),
             .int("StartFrame", .int, 0),
-            .int("NumFrames", .int, source.frames),
+            // A still has exactly one frame however long it is held for.
+            .int("NumFrames", .int, source.isStill ? 1 : source.frames),
             .data("FrameRate", DRTBlobs.frameRate(source.rate)),
             .text("DbType", "BtVideoTime"),
         ])
     }
 
     private static func geometryBlob(_ source: Source) -> String {
-        DRTBlobs.keyValue([
+        var fields: [DRTBlobs.Field] = [.text("UniqueId", newID())]
+        // Resolve writes a scan type for a still and none for a clip.
+        if source.isStill { fields.append(.int("ScanType", .int, 0)) }
+        fields.append(.data("Resolution", DRTBlobs.resolution(width: source.width,
+                                                              height: source.height)))
+        // Bytes a frame occupies; for a still the frame is the whole file.
+        fields.append(.int("FrameSize", .int, source.isStill
+                           ? source.byteSize
+                           : source.width * source.height * 3 / 2))
+        fields.append(.text("DbType", "BtGeometry"))
+        return DRTBlobs.keyValue(fields)
+    }
+
+    /// How much of the source the item may reach.
+    ///
+    /// A clip with real frames names its last one. A still has only one frame
+    /// but can be held for any length, so it carries a ramp instead.
+    private static func timemap(_ source: Source) -> String {
+        guard source.isStill else {
+            return DRTBlobs.timemap(frames: source.frames, rate: source.rate)
+        }
+        let limit = 60_000.0
+        var keyframes = Data(hexadecimal: "800a000a0909")
+        withUnsafeBytes(of: limit.bitPattern.littleEndian) { keyframes.append(contentsOf: $0) }
+        return DRTBlobs.keyValue([
+            .double("YMin", -1),
+            .double("YMax", -1),
+            .double("XMax", limit),
             .text("UniqueId", newID()),
-            .data("Resolution", DRTBlobs.resolution(width: source.width,
-                                                    height: source.height)),
-            // Bytes a frame occupies; Resolve only seems to show it.
-            .int("FrameSize", .int, source.width * source.height * 3 / 2),
-            .text("DbType", "BtGeometry"),
+            .data("KeyframesBA", keyframes),
+            .text("DbType", "Sm2TimeMap"),
         ])
+    }
+
+    /// A timeline item's FieldsBlob, naming the items it moves with.
+    ///
+    /// Resolve writes this compressed; raw is the same payload and reads back
+    /// the same, which is what makes it writable here at all.
+    private static func linkedItemFields(_ partners: [String],
+                                         audio: Bool = false) -> String {
+        guard !partners.isEmpty else {
+            return audio ? Fixed.audioItemFields : Fixed.itemFields
+        }
+        let document = Data(hexadecimal: DRTBlobs.keyValue(
+            partners.enumerated().map { .text("\($0.offset)", $0.element) }))
+        var inner = DRTBlobs.bytes(1, document)
+        inner.append(Data(hexadecimal: "a80100"))
+        var middle = DRTBlobs.bytes(1, inner)
+        middle.append(Data(hexadecimal: "2001"))
+        var payload = DRTBlobs.bytes(1, middle)
+        payload.append(Data(hexadecimal: audio
+            ? "7804"
+            : "1210000000000000000600000000ffffffff980101"))
+        return DRTBlobs.wrap(payload)
     }
 
     private static func proxyBlob() -> String {
@@ -570,6 +655,7 @@ enum DRTExporter {
         static let poolFields =
             "000000020000001b800a180a040a0230041210000000000000000600000000ffffffff"
         static let radiometry = "80089403100228108801329001d080a006980100d80100"
+        static let stillRadiometry = "8010022810980100d80100"
         static let trackFields =
             "000000010000000100000012004e0075006d004c00610079006500720073000000020000000000"
         static let itemFields =

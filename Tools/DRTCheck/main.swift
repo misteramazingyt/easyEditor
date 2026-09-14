@@ -52,24 +52,33 @@ let take = source("take.mov", audio: .init(sampleRate: 44_100, channels: 1,
                                            samples: 176_400, codec: "AAC"))
 let matte = source("take.matte.mov")
 let broll = source("broll.mov")
+var still = source("photo.jpg")
+still.isStill = true
+still.frames = 1
+still.byteSize = 316_109
 var voice = source("voiceover.m4a", audio: .init(sampleRate: 44_100, channels: 1,
                                                  samples: 176_400, codec: "AAC"))
 voice.isVideo = false
 var takeAudio = take
 takeAudio.isVideo = false
 
+// The take, the matte that keys it and its own audio are one group, so they
+// move together on the timeline.
+let group = UUID()
+
 let timeline = DRTExporter.Timeline(
     name: "Check & <Export>", width: 1080, height: 1920, rate: 30,
     video: [
         [DRTExporter.Clip(source: matte, start: 0, duration: 120,
-                          composite: DRTBlobs.Composite.lum)],
+                          composite: DRTBlobs.Composite.lum, group: group)],
         [DRTExporter.Clip(source: take, start: 0, duration: 120,
-                          composite: DRTBlobs.Composite.foreground)],
+                          composite: DRTBlobs.Composite.foreground, group: group)],
         [DRTExporter.Clip(source: broll, start: 120, duration: 120)],
+        [DRTExporter.Clip(source: still, start: 120, duration: 120)],
     ],
     audio: [
         [DRTExporter.Clip(source: voice, start: 0, duration: 120)],
-        [DRTExporter.Clip(source: takeAudio, start: 0, duration: 120)],
+        [DRTExporter.Clip(source: takeAudio, start: 0, duration: 120, group: group)],
     ])
 
 do {

@@ -150,8 +150,8 @@ def check_archive(path):
             fail("the template's identity %s survived the remap" % stale)
     print("  ok the template's identities were replaced")
 
-    for tag, expected in (("Sm2TiTrack", 5), ("Sm2TiVideoClip", 3),
-                          ("Sm2TiAudioClip", 2), ("Sm2MpVideoClip", 3),
+    for tag, expected in (("Sm2TiTrack", 6), ("Sm2TiVideoClip", 4),
+                          ("Sm2TiAudioClip", 2), ("Sm2MpVideoClip", 4),
                           ("Sm2MpAudioClip", 1)):
         found = contents[seq].count("<%s " % tag) + contents[pool].count("<%s " % tag)
         if found != expected:
@@ -198,8 +198,71 @@ def check_archive(path):
         print("  ok the timeline name is escaped")
 
 
+def unwrap(blob):
+    """The payload of a version-2 protobuf blob, which the exporter always
+    writes uncompressed."""
+    raw = bytes.fromhex(blob)
+    if raw[8] != 0x80:
+        fail("a blob is compressed (flag 0x%02x); the app has no zstd" % raw[8])
+        return None
+    return raw[9:]
+
+
+def nested(payload, depth):
+    """Step into `depth` levels of protobuf field 1."""
+    for _ in range(depth):
+        if not payload or payload[0] != 0x0A:
+            return None
+        length = payload[1]
+        payload = payload[2:2 + length]
+    return payload
+
+
+def check_groups(path):
+    """A take, its matte and its own audio have to name each other, or they
+    come into Resolve unlinked and stop moving together."""
+    print("groups")
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        seq = next(n for n in names if n.startswith("SeqContainer/"))
+        text = archive.read(seq).decode("utf-8")
+
+    links = {}
+    pattern = (r'<(Sm2TiVideoClip|Sm2TiAudioClip) DbId="([^"]+)">\s*'
+               r"<FieldsBlob>([0-9a-fA-F]*)</FieldsBlob>[\s\S]*?<Name>([^<]*)</Name>")
+    for kind, db, blob, name in re.findall(pattern, text):
+        payload = unwrap(blob)
+        if payload is None:
+            continue
+        document = nested(payload, 3)
+        if document is None:
+            continue
+        fields, exact = kv_read(document)
+        if not exact:
+            fail("the link blob on %s does not consume exactly" % name)
+        links[db] = (name, [value for _, _, value in fields])
+
+    if not links:
+        fail("nothing is linked; the take, its matte and its audio should be")
+        return
+    for db, (name, partners) in links.items():
+        for partner in partners:
+            if partner not in links:
+                fail("%s links to %s, which is not an item on this timeline"
+                     % (name, partner))
+            elif db not in links[partner][1]:
+                fail("%s links to %s but is not linked back" % (name, partner))
+    print("  ok %d items are linked, each one named back" % len(links))
+    sizes = sorted(len(partners) for _, partners in links.values())
+    if sizes != [2, 2, 2]:
+        fail("expected one group of three, found partner counts %s" % sizes)
+    else:
+        print("  ok the take, its matte and its audio are one group of three")
+
+
 check_blobs(sys.argv[1])
 check_archive(sys.argv[2])
+check_groups(sys.argv[2])
 print()
 if failures:
     sys.exit("%d check%s failed" % (len(failures), "" if len(failures) == 1 else "s"))

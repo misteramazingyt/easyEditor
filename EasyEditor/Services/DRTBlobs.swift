@@ -50,10 +50,15 @@ enum DRTBlobs {
         case int(String, FieldType, Int)
         case text(String, String)
         case data(String, Data)
+        /// A double, which the format stores as its bit pattern in a 64-bit
+        /// integer field rather than as a type of its own.
+        case double(String, Double)
 
         var key: String {
             switch self {
-            case .int(let key, _, _), .text(let key, _), .data(let key, _): return key
+            case .int(let key, _, _), .text(let key, _), .data(let key, _),
+                 .double(let key, _):
+                return key
             }
         }
     }
@@ -86,6 +91,10 @@ enum DRTBlobs {
                 out.append(0)
                 out.append(bigEndian(UInt32(value.count)))
                 out.append(value)
+            case .double(_, let value):
+                out.append(bigEndian(FieldType.long.rawValue))
+                out.append(0)
+                out.append(bigEndian(value.bitPattern, width: 8))
             }
         }
         return out.hexadecimal
@@ -107,6 +116,14 @@ enum DRTBlobs {
 
     static func string(_ number: Int, _ text: String) -> Data {
         let payload = Data(text.utf8)
+        var out = varint(UInt64(number) << 3 | 2)
+        out.append(varint(UInt64(payload.count)))
+        out.append(payload)
+        return out
+    }
+
+    /// A length-delimited field carrying raw bytes — a nested message.
+    static func bytes(_ number: Int, _ payload: Data) -> Data {
         var out = varint(UInt64(number) << 3 | 2)
         out.append(varint(UInt64(payload.count)))
         out.append(payload)

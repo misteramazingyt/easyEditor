@@ -84,15 +84,20 @@ extension DRTExporter {
                 let start = frames(project.start(of: clip))
                 let duration = frames(clip.effectiveDuration)
                 let keyed = entry.matteName.flatMap { sources[$0] }
+                // A take, the matte that keys it and its own audio move
+                // together; anything unkeyed with no sound needs no group.
+                let group = (keyed != nil || entry.hasAudio) ? clip.id : nil
                 takes.append(Clip(source: source, start: start, duration: duration,
                                   mediaStart: frames(clip.trimStart),
                                   composite: keyed == nil
                                       ? DRTBlobs.Composite.normal
-                                      : DRTBlobs.Composite.foreground))
+                                      : DRTBlobs.Composite.foreground,
+                                  group: group))
                 if let keyed {
                     mattes.append(Clip(source: keyed, start: start, duration: duration,
                                        mediaStart: frames(clip.trimStart),
-                                       composite: DRTBlobs.Composite.lum))
+                                       composite: DRTBlobs.Composite.lum,
+                                       group: group))
                 }
             }
             // The matte has to sit under the take it belongs to, so a level
@@ -132,11 +137,13 @@ extension DRTExporter {
                           var source = sources[entry.fileName], source.audio != nil else {
                         return nil
                     }
-                    // Same file, same pool entry — only the item is separate.
+                    // Same file, same pool entry — only the item is separate,
+                    // and it belongs to the same group as the picture.
                     source.isVideo = false
                     return Clip(source: source, start: frames(project.start(of: clip)),
                                 duration: frames(clip.effectiveDuration),
-                                mediaStart: frames(clip.trimStart))
+                                mediaStart: frames(clip.trimStart),
+                                group: clip.id)
                 }
             if !clips.isEmpty { audio.append(clips) }
         }
@@ -169,6 +176,16 @@ extension DRTExporter {
         source.height = Int(fallback.size.height)
         source.rate = frameRate
         source.frames = max(1, Int((fallback.duration * frameRate).rounded()))
+        source.byteSize = (try? FileManager.default
+            .attributesOfItem(atPath: url.path)[.size] as? Int).flatMap { $0 } ?? 0
+
+        // A still has no video track to read, and Resolve wants it described
+        // as one frame rather than as however long the app holds it for.
+        if fallback.clip.kind == .image {
+            source.isStill = true
+            source.frames = 1
+            return source
+        }
 
         let asset = AVURLAsset(url: url)
         if let track = try? await asset.loadTracks(withMediaType: .video).first {
