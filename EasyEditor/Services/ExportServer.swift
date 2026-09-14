@@ -32,21 +32,23 @@ final class ExportServer: ObservableObject {
         do {
             let parameters = NWParameters.tcp
             parameters.allowLocalEndpointReuse = true
-            let listener = try NWListener(using: parameters, port: port)
+            let listener = try NWListener(using: parameters, on: port)
             listener.newConnectionHandler = { [weak self] connection in
                 Task { @MainActor in self?.accept(connection) }
             }
-            listener.stateUpdateHandler = { [weak self] state in
+            listener.stateUpdateHandler = { [weak self] (state: NWListener.State) in
                 Task { @MainActor in
+                    guard let self else { return }
                     switch state {
                     case .ready:
-                        self?.isRunning = true
-                        self?.address = self.map { "http://\($0.localIP() ?? "?"):\($0.port)" }
+                        self.isRunning = true
+                        let host = self.localIP() ?? "this device"
+                        self.address = "http://\(host):\(self.port.rawValue)"
                     case .failed(let error):
-                        self?.isRunning = false
-                        self?.lastError = error.localizedDescription
+                        self.isRunning = false
+                        self.lastError = error.localizedDescription
                     case .cancelled:
-                        self?.isRunning = false
+                        self.isRunning = false
                     default:
                         break
                     }
